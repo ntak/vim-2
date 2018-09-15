@@ -113,4 +113,8 @@ void parse_queued_messages(void);
 int mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc);
 int build_argv_from_string(char_u *cmd, char ***argv, int *argc);
 int build_argv_from_list(list_T *l, char ***argv, int *argc);
+int trace_init(void);
+void trace_exit(void);
+int trace_capture(char *buf, int size);
+void trace_message(void);
 /* vim: set ft=c : */
