@@ -2429,8 +2429,10 @@ fun! netrw#NetWrite(...) range
     if getline(1) !~ "^$"
      if !exists("g:netrw_quiet")
       NetrwKeepj call netrw#ErrorMsg(s:ERROR,getline(1),14)
+      let mod=1
+     else
+      let mod=0
      endif
-     let mod=1
     endif
 
     " remove enew buffer (quietly)
