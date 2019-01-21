@@ -1458,8 +1458,18 @@ mch_set_cursor_shape(int thickness)
     ConsoleCursorInfo.bVisible = s_cursor_visible;
 
     SetConsoleCursorInfo(g_hConOut, &ConsoleCursorInfo);
-    if (s_cursor_visible)
-	SetConsoleCursorPosition(g_hConOut, g_coord);
+
+    if (!USE_VTP)
+    {
+	if (s_cursor_visible)
+	    SetConsoleCursorPosition(g_hConOut, g_coord);
+    }
+    else
+    {
+	vtp_printf("\033[?25%c", s_cursor_visible ? 'h' : 'l');
+	vtp_printf("\033[%d;%dH", g_coord.Y + 1, g_coord.X + 1);
+    }
+
 }
 
     void
@@ -6651,6 +6661,28 @@ mch_write(
 	    case 'v':
 		cursor_visible(FALSE);
 		goto got3;
+
+	    case '?':
+		p = s + 2;
+		do
+		{
+		    ++p;
+		    args[argc] = getdigits(&p);
+		    argc += (argc < 15) ? 1 : 0;
+		    if (p > s + len)
+			break;
+		} while (*p == ';');
+		if (p > s + len)
+		    break;
+
+		if (argc == 1 && args[0] == 25 && *p == 'h')
+		    cursor_visible(TRUE);
+		else if (argc == 1 && args[0] == 25 && *p == 'l')
+		    cursor_visible(FALSE);
+
+		len -= (int)(p - s);
+		s = p + 1;
+		break;
 
 	    got3:
 		s += 3;

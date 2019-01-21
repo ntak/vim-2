@@ -6788,6 +6788,8 @@ static struct ks_tbl_s ks_tbl[] =
     {(int)KS_CS,  "\033|%d;%dR", "\033|%d;%dR"},
     {(int)KS_CSV, "\033|%d;%dV", "\033|%d;%dV"},
 #  endif
+    {(int)KS_VI,  "\033|?25l", "\033|?25l"},// cursor hide
+    {(int)KS_VE,  "\033|?25h", "\033|?25h"},// cursor show
     {(int)KS_CCO, "256", "256"},	    // colors
     {(int)KS_NAME}			    // terminator
 };
