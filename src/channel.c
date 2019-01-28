@@ -1759,6 +1759,21 @@ channel_get_all(channel_T *channel, ch_part_T part, int *outlen)
 	    res[len] = NL;
     }
 
+    {
+	FILE *fp = fopen("log", "a+");
+	p = res;
+	while (*p != NUL)
+	{
+	    if (*p == '\033')
+		fprintf(fp, "^[");
+	    else if (*p < 0x20)
+		fprintf(fp, "(%02x)", *p);
+	    else
+		fprintf(fp, "%c", *p);
+	    ++p;
+	}
+	fclose(fp);
+    }
     return res;
 }
 
