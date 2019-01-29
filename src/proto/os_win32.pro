@@ -80,4 +80,6 @@ int has_conpty_working(void);
 int get_conpty_type(void);
 int is_conpty_stable(void);
 void resize_console_buf(void);
+void vtp_flag_exit(void);
+int use_cmdexe(void);
 /* vim: set ft=c : */

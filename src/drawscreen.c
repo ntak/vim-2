@@ -2431,17 +2431,30 @@ win_update(win_T *wp)
     // Rewrite the character at the end of the screen line.
     if (use_vtp())
     {
-	int i;
+# if !defined(FEAT_GUI) || defined(VIMDLL)
+#  ifdef VIMDLL
+	if (!gui.in_use)
+	{
+#  endif
+	    if (use_cmdexe())
+	    {
+# endif
+		int i;
 
-	for (i = 0; i < Rows; ++i)
-	    if (enc_utf8)
-		if ((*mb_off2cells)(LineOffset[i] + Columns - 2,
+		for (i = 0; i < Rows; ++i)
+		    if (enc_utf8)
+			if ((*mb_off2cells)(LineOffset[i] + Columns - 2,
 					   LineOffset[i] + screen_Columns) > 1)
-		    screen_draw_rectangle(i, Columns - 2, 1, 2, FALSE);
-		else
-		    screen_draw_rectangle(i, Columns - 1, 1, 1, FALSE);
-	    else
-		screen_char(LineOffset[i] + Columns - 1, i, Columns - 1);
+			    screen_draw_rectangle(i, Columns - 2, 1, 2, FALSE);
+			else
+			    screen_draw_rectangle(i, Columns - 1, 1, 1, FALSE);
+		    else
+			screen_char(LineOffset[i] + Columns - 1, i,
+								  Columns - 1);
+	    }
+#  ifdef VIMDLL
+	}
+#  endif
     }
 #endif
 
