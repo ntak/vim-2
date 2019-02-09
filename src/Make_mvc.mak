@@ -491,7 +491,8 @@ NETBEANS_LIB	= WSock32.lib
 # gdi32.lib and comdlg32.lib for printing support
 # ole32.lib and uuid.lib are needed for FEAT_SHORTCUT
 CON_LIB = oldnames.lib kernel32.lib advapi32.lib shell32.lib gdi32.lib \
-          comdlg32.lib ole32.lib netapi32.lib uuid.lib /machine:$(CPU)
+          comdlg32.lib ole32.lib netapi32.lib uuid.lib dbghelp.lib \
+	  /machine:$(CPU)
 !if "$(DELAYLOAD)" == "yes"
 CON_LIB = $(CON_LIB) /DELAYLOAD:comdlg32.dll /DELAYLOAD:ole32.dll DelayImp.lib
 !endif
@@ -634,7 +635,7 @@ OPTFLAG = /O1
 !elseif "$(OPTIMIZE)" == "SPEED"
 OPTFLAG = /O2
 !else # MAXSPEED
-OPTFLAG = /Ox
+OPTFLAG = /Od
 !endif
 
 !if $(MSVC_MAJOR) >= 8
