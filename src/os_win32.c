@@ -196,6 +196,10 @@ static int vtp_printf(char *format, ...);
 static void vtp_sgr_bulk(int arg);
 static void vtp_sgr_bulks(int argc, int *argv);
 
+static BOOL vtp_check_device(char_u *query, char_u *result);
+static void vtp_check_cmdexe();
+static int vtp_in_cmdexe = FALSE;
+
 static guicolor_T save_console_bg_rgb;
 static guicolor_T save_console_fg_rgb;
 
@@ -230,7 +234,13 @@ static char_u *exe_path = NULL;
 
 static BOOL win8_or_later = FALSE;
 
+#if defined(__GNUC__) && !defined(__MINGW32__)  && !defined(__CYGWIN__)
+# define AChar AsciiChar
+#else
+# define AChar uChar.AsciiChar
+#endif
 #ifndef FEAT_GUI_W32
+
 /* Dynamic loading for portability */
 typedef struct _DYN_CONSOLE_SCREEN_BUFFER_INFOEX
 {
@@ -289,11 +299,13 @@ read_console_input(
     HANDLE	    hInput,
     INPUT_RECORD    *lpBuffer,
     DWORD	    nLength,
-    LPDWORD	    lpEvents)
+    LPDWORD	    lpEvents,
+    LPSTR	    lpszQuery,
+    LPVOID	    *lpParam)
 {
     enum
     {
-	IRSIZE = 10
+	IRSIZE = 30
     };
     static INPUT_RECORD s_irCache[IRSIZE];
     static DWORD s_dwIndex = 0;
@@ -302,6 +314,21 @@ read_console_input(
     int head;
     int tail;
     int i;
+    int in_query = 0;
+
+    if (nLength == -3)
+    {
+	if (!vtp_working)
+	{
+	    if (lpParam != NULL)
+		*lpParam = (LPSTR)vim_strsave("");
+	    return TRUE;
+	}
+
+	if (lpszQuery != NULL)
+	    vtp_printf(lpszQuery);
+	++in_query;
+    }
 
     if (nLength == -2)
 	return (s_dwMax > 0) ? TRUE : FALSE;
@@ -349,6 +376,40 @@ read_console_input(
 	}
     }
 
+    if (in_query > 0)
+    {
+	/* Immediately after sending the query, discard the keyboard event. */
+	INPUT_RECORD irStash[IRSIZE];
+	int stashindex = 0;
+	char_u dst[IRSIZE + 1];
+	int dstindex = 0;
+
+	for (i = s_dwIndex; i < (int)(s_dwMax - s_dwIndex); i++)
+	{
+	    if (s_irCache[i].EventType == KEY_EVENT)
+	    {
+		if (s_irCache[i].Event.KeyEvent.bKeyDown)
+		{
+		    dst[dstindex++] = s_irCache[i].Event.KeyEvent.AChar;
+		}
+	    }
+	    else
+	    {
+		irStash[stashindex++] = s_irCache[i];
+	    }
+	}
+	dst[dstindex] = NUL;
+	*lpParam = (LPVOID)vim_strsave(dst);
+
+	for (i = 0; i < stashindex; ++i)
+	    s_irCache[s_dwIndex + i] = irStash[i];
+	s_dwMax = s_dwIndex + i;
+
+	--in_query;
+
+	return TRUE;
+    }
+
     *lpBuffer = s_irCache[s_dwIndex];
     if (!(nLength == -1 || nLength == -2) && ++s_dwIndex >= s_dwMax)
 	s_dwMax = 0;
@@ -366,7 +427,24 @@ peek_console_input(
     DWORD	    nLength,
     LPDWORD	    lpEvents)
 {
-    return read_console_input(hInput, lpBuffer, -1, lpEvents);
+    return read_console_input(hInput, lpBuffer, -1, lpEvents, NULL, NULL);
+}
+
+/*
+ * Output a query and return the result.
+ * Return memory allocated by vim_strsave.
+ */
+    static BOOL
+query_console_input(
+    HANDLE  hInput,
+    LPSTR   lpszQuery,
+    LPVOID  *lpszResult)
+{
+    if (read_console_input(NULL, NULL, -2, NULL, NULL, NULL))
+	return FALSE;
+    *lpszResult = lpszQuery;
+    return read_console_input(hInput, NULL, -3, NULL, lpszQuery,
+							   (LPVOID)lpszResult);
 }
 
 # ifdef FEAT_CLIENTSERVER
@@ -378,7 +456,7 @@ msg_wait_for_multiple_objects(
     DWORD    dwMilliseconds,
     DWORD    dwWakeMask)
 {
-    if (read_console_input(NULL, NULL, -2, NULL))
+    if (read_console_input(NULL, NULL, -2, NULL, NULL, NULL))
 	return WAIT_OBJECT_0;
     return MsgWaitForMultipleObjects(nCount, pHandles, fWaitAll,
 				     dwMilliseconds, dwWakeMask);
@@ -391,7 +469,7 @@ wait_for_single_object(
     HANDLE hHandle,
     DWORD dwMilliseconds)
 {
-    if (read_console_input(NULL, NULL, -2, NULL))
+    if (read_console_input(NULL, NULL, -2, NULL, NULL, NULL))
 	return WAIT_OBJECT_0;
     return WaitForSingleObject(hHandle, dwMilliseconds);
 }
@@ -1309,7 +1387,8 @@ decode_mouse_event(
 			{
 			    if (pmer2->dwEventFlags != MOUSE_MOVED)
 			    {
-				read_console_input(g_hConIn, &ir, 1, &cRecords);
+				read_console_input(g_hConIn, &ir, 1, &cRecords,
+								   NULL, NULL);
 
 				return decode_mouse_event(pmer2);
 			    }
@@ -1317,7 +1396,8 @@ decode_mouse_event(
 				     s_yOldMouse == pmer2->dwMousePosition.Y)
 			    {
 				/* throw away spurious mouse move */
-				read_console_input(g_hConIn, &ir, 1, &cRecords);
+				read_console_input(g_hConIn, &ir, 1, &cRecords,
+								   NULL, NULL);
 
 				/* are there any more mouse events in queue? */
 				peek_console_input(g_hConIn, &ir, 1, &cRecords);
@@ -1637,7 +1717,7 @@ WaitForChar(long msec, int ignore_input)
 		if (ir.Event.KeyEvent.UChar == 0
 			&& ir.Event.KeyEvent.wVirtualKeyCode == 13)
 		{
-		    read_console_input(g_hConIn, &ir, 1, &cRecords);
+		    read_console_input(g_hConIn, &ir, 1, &cRecords, NULL, NULL);
 		    continue;
 		}
 #endif
@@ -1646,7 +1726,7 @@ WaitForChar(long msec, int ignore_input)
 		    return TRUE;
 	    }
 
-	    read_console_input(g_hConIn, &ir, 1, &cRecords);
+	    read_console_input(g_hConIn, &ir, 1, &cRecords, NULL, NULL);
 
 	    if (ir.EventType == FOCUS_EVENT)
 		handle_focus_event(ir);
@@ -1734,7 +1814,7 @@ tgetch(int *pmodifiers, WCHAR *pch2)
 	    return 0;
 # endif
 #endif
-	if (read_console_input(g_hConIn, &ir, 1, &cRecords) == 0)
+	if (read_console_input(g_hConIn, &ir, 1, &cRecords, NULL, NULL) == 0)
 	{
 	    if (did_create_conin)
 		read_error_exit();
@@ -2681,6 +2761,7 @@ mch_init(void)
 
     vtp_flag_init();
     vtp_init();
+    vtp_check_cmdexe();
 }
 
 /*
@@ -7869,6 +7950,42 @@ use_vtp(void)
 is_term_win32(void)
 {
     return T_NAME != NULL && STRCMP(T_NAME, "win32") == 0;
+}
+
+    static BOOL
+vtp_check_device(
+    char_u *query,
+    char_u *result)
+{
+    int    retry = 10;
+    char_u *r;
+    BOOL   dst = FALSE;
+
+    while (--retry)
+    {
+	if (query_console_input(g_hConIn, query, (LPVOID)&r))
+	    break;
+	Sleep(20);
+    }
+
+    if (STRCMP(r, result) == 0)
+	dst = TRUE;
+
+    vim_free(r);
+
+    return dst;
+}
+
+    static void
+vtp_check_cmdexe()
+{
+    vtp_in_cmdexe = vtp_check_device("\033[0c", "\033[?1;0c");
+}
+
+    int
+use_cmdexe()
+{
+    return vtp_in_cmdexe;
 }
 
 #endif
