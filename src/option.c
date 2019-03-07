@@ -7776,7 +7776,16 @@ did_set_string_option(
 #if defined(FEAT_VTP) && defined(FEAT_TERMGUICOLORS)
     if (did_swaptcap)
     {
+	char_u *save;
+
+	highlight_gui_started();
+	control_console_color_rgb();
+
+	save = vim_strsave(T_CCO);
 	set_termname((char_u *)"win32");
+	set_string_option_direct((char_u *)"t_Co", -1, save, OPT_FREE, 0);
+	t_colors = atoi((char *)save);
+
 	init_highlight(TRUE, FALSE);
     }
 #endif
@@ -8801,8 +8810,15 @@ set_bool_option(
 	/* reset t_Co */
 	if (is_term_win32())
 	{
+	    char_u *save;
+
 	    control_console_color_rgb();
+
+	    save = vim_strsave(T_CCO);
 	    set_termname(T_NAME);
+	    set_string_option_direct((char_u *)"t_Co", -1, save, OPT_FREE, 0);
+	    t_colors = atoi((char *)save);
+
 	    init_highlight(TRUE, FALSE);
 	}
 # endif
