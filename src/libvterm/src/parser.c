@@ -127,6 +127,8 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
   size_t pos = 0;
   const char *string_start = NULL;  /* init to avoid gcc warning */
 
+  vt->state->in_backspace = 0;
+
   switch(vt->parser.state) {
   case NORMAL:
   case CSI_LEADER:
@@ -172,6 +174,9 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
       // fallthrough
     }
     else if(c < 0x20) { // other C0
+      if(c == 0x08) // BS
+        if(pos + 2 < len && bytes[pos + 1] == 0x20 && bytes[pos + 2] == 0x08)
+	  vt->state->in_backspace = 2;
       if(vt->parser.state >= STRING)
         more_string(vt, string_start, bytes + pos - string_start);
       do_control(vt, c);
