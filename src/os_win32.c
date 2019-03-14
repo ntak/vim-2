@@ -222,6 +222,11 @@ static void set_console_color_rgb(void);
 static void reset_console_color_rgb(void);
 #endif
 
+#ifndef FEAT_GUI_MSWIN
+static DWORD g_vtp_result;
+# define VTP_NPRINTF(x, n) WriteConsoleA(g_hConOut, x, n, &g_vtp_result, NULL)
+#endif
+
 /* This flag is newly created from Windows 10 */
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 # define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
@@ -5875,10 +5880,12 @@ clear_chars(
 {
     DWORD dwDummy;
 
-    FillConsoleOutputCharacter(g_hConOut, ' ', n, coord, &dwDummy);
-
     if (!USE_VTP)
-	FillConsoleOutputAttribute(g_hConOut, g_attrCurrent, n, coord, &dwDummy);
+    {
+	FillConsoleOutputCharacter(g_hConOut, ' ', n, coord, &dwDummy);
+	FillConsoleOutputAttribute(g_hConOut, g_attrCurrent, n, coord,
+								     &dwDummy);
+    }
     else
     {
 	set_console_color_rgb();
@@ -5902,7 +5909,7 @@ clear_screen(void)
     {
 	set_console_color_rgb();
 	gotoxy(1, 1);
-	vtp_printf("\033[2J");
+	VTP_NPRINTF("\033[2J", 4);
     }
 }
 
@@ -5922,7 +5929,7 @@ clear_to_end_of_display(void)
     {
 	set_console_color_rgb();
 	gotoxy(g_coord.X + 1, g_coord.Y + 1);
-	vtp_printf("\033[0J");
+	VTP_NPRINTF("\033[0J", 4);
 
 	gotoxy(save.X + 1, save.Y + 1);
 	g_coord = save;
@@ -5944,7 +5951,7 @@ clear_to_end_of_line(void)
     {
 	set_console_color_rgb();
 	gotoxy(g_coord.X + 1, g_coord.Y + 1);
-	vtp_printf("\033[0K");
+	VTP_NPRINTF("\033[0K", 4);
 
 	gotoxy(save.X + 1, save.Y + 1);
 	g_coord = save;
@@ -7773,11 +7780,12 @@ vtp_printf(
     char_u  buf[100];
     va_list list;
     DWORD   result;
+    int	    len;
 
     va_start(list, format);
-    vim_vsnprintf((char *)buf, 100, (char *)format, list);
+    len = vim_vsnprintf((char *)buf, 100, (char *)format, list);
     va_end(list);
-    WriteConsoleA(g_hConOut, buf, (DWORD)STRLEN(buf), &result, NULL);
+    WriteConsoleA(g_hConOut, buf, (DWORD)len, &result, NULL);
     return (int)result;
 }
 
@@ -7798,23 +7806,87 @@ vtp_sgr_bulks(
 )
 {
     /* 2('\033[') + 4('255.') * 16 + NUL */
-    char_u buf[2 + (4 * 16) + 1];
-    char_u *p;
+    static char_u buf[2 + (4 * 16) + 1];
+    static int init = 0;
+    char_u *p = buf + 2;
     int    i;
 
-    p = buf;
-    *p++ = '\033';
-    *p++ = '[';
-
-    for (i = 0; i < argc; ++i)
+    if (!init)
     {
-	p += vim_snprintf((char *)p, 4, "%d", args[i] & 0xff);
-	*p++ = ';';
+	buf[0] = '\033';
+	buf[1] = '[';
+	init++;
     }
-    p--;
-    *p++ = 'm';
-    *p = NUL;
-    vtp_printf((char *)buf);
+
+    if (argc == 1)
+    {
+	static char_u one_table[] =
+	    "01234567891111111111222222222233333333334444444444" // 000-049
+	    "55555555556666666666777777777788888888889999999999" // 050-099
+	    "11111111111111111111111111111111111111111111111111" // 100-149
+	    "11111111111111111111111111111111111111111111111111" // 150-199
+	    "22222222222222222222222222222222222222222222222222" // 200-249
+	    "222222";                                            // 250-255
+	static char_u two_table[] =
+	    "mmmmmmmmmm0123456789012345678901234567890123456789" // 000-049
+	    "01234567890123456789012345678901234567890123456789" // 050-099
+	    "00000000001111111111222222222233333333334444444444" // 100-149
+	    "55555555556666666666777777777788888888889999999999" // 150-199
+	    "00000000001111111111222222222233333333334444444444" // 200-249
+	    "555555";                                            // 250-255
+	static char_u three_table[] =
+	    "..........mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm" // 000-049
+	    "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm" // 050-099
+	    "01234567890123456789012345678901234567890123456789" // 100-149
+	    "01234567890123456789012345678901234567890123456789" // 150-199
+	    "01234567890123456789012345678901234567890123456789" // 200-249
+	    "012345";                                            // 250-255
+	static char len_table[256] =
+	{
+	    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, // 000
+	    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, // 020
+	    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, // 040
+	    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, // 060
+	    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, // 080
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 100
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 120
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 140
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 160
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 180
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 200
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, // 220
+	    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6              // 240
+	};
+	static char_u str[] = "\033[...m";
+	DWORD result;
+	int arg = args[0] & 0xff;
+
+	str[4] = three_table[arg];
+	str[3] = two_table[arg];
+	str[2] = one_table[arg];
+	WriteConsoleA(g_hConOut, str, len_table[arg], &result, NULL);
+    }
+    else if (argc == 2)
+	vtp_printf("\033[%d;%dm", args[0], args[1]);
+    else if (argc == 3)
+	vtp_printf("\033[%d;%d;%dm", args[0], args[1], args[2]);
+    else if (argc == 4)
+	vtp_printf("\033[%d;%d;%d;%dm", args[0], args[1], args[2], args[3]);
+    else if (argc == 5)
+	vtp_printf("\033[%d;%d;%d;%d;%dm", args[0], args[1], args[2], args[3],
+								      args[4]);
+    else
+    {
+	for (i = 0; i < argc; ++i)
+	{
+	    p += vim_snprintf((char *)p, 4, "%d", args[i] & 0xff);
+	    *p++ = ';';
+	}
+	p--;
+	*p++ = 'm';
+	*p = NUL;
+	vtp_printf((char *)buf);
+    }
 }
 
 # ifdef FEAT_TERMGUICOLORS
