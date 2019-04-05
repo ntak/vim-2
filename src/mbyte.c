@@ -144,6 +144,7 @@ static int utf_ptr2cells_len(char_u *p, int size);
 static int dbcs_char2cells(int c);
 static int dbcs_ptr2cells_len(char_u *p, int size);
 static int dbcs_ptr2char(char_u *p);
+static int utf_isemoji(int c);
 
 /*
  * Lookup table to quickly get the length in bytes of a UTF-8 character from
@@ -1399,6 +1400,52 @@ utf_uint2cells(UINT32_T c)
 }
 #endif
 
+/* Sorted list of non-overlapping intervals of Emoji characters that don't
+ * have ambiguous or double width,
+ * based on http://unicode.org/emoji/charts/emoji-list.html */
+static struct interval emoji_width[] =
+{
+    {0x1f1e6, 0x1f1ff},
+    {0x1f321, 0x1f321},
+    {0x1f324, 0x1f32c},
+    {0x1f336, 0x1f336},
+    {0x1f37d, 0x1f37d},
+    {0x1f396, 0x1f397},
+    {0x1f399, 0x1f39b},
+    {0x1f39e, 0x1f39f},
+    {0x1f3cb, 0x1f3ce},
+    {0x1f3d4, 0x1f3df},
+    {0x1f3f3, 0x1f3f5},
+    {0x1f3f7, 0x1f3f7},
+    {0x1f43f, 0x1f43f},
+    {0x1f441, 0x1f441},
+    {0x1f4fd, 0x1f4fd},
+    {0x1f549, 0x1f54a},
+    {0x1f56f, 0x1f570},
+    {0x1f573, 0x1f579},
+    {0x1f587, 0x1f587},
+    {0x1f58a, 0x1f58d},
+    {0x1f590, 0x1f590},
+    {0x1f5a5, 0x1f5a5},
+    {0x1f5a8, 0x1f5a8},
+    {0x1f5b1, 0x1f5b2},
+    {0x1f5bc, 0x1f5bc},
+    {0x1f5c2, 0x1f5c4},
+    {0x1f5d1, 0x1f5d3},
+    {0x1f5dc, 0x1f5de},
+    {0x1f5e1, 0x1f5e1},
+    {0x1f5e3, 0x1f5e3},
+    {0x1f5e8, 0x1f5e8},
+    {0x1f5ef, 0x1f5ef},
+    {0x1f5f3, 0x1f5f3},
+    {0x1f5fa, 0x1f5fa},
+    {0x1f6cb, 0x1f6cf},
+    {0x1f6e0, 0x1f6e5},
+    {0x1f6e9, 0x1f6e9},
+    {0x1f6f0, 0x1f6f0},
+    {0x1f6f3, 0x1f6f3}
+};
+
 /*
  * For UTF-8 character "c" return 2 for a double-width character, 1 for others.
  * Returns 4 or 6 for an unprintable character.
@@ -1521,52 +1568,6 @@ utf_char2cells(int c)
 	{0x1f9d0, 0x1f9ff},
 	{0x20000, 0x2fffd},
 	{0x30000, 0x3fffd}
-    };
-
-    /* Sorted list of non-overlapping intervals of Emoji characters that don't
-     * have ambiguous or double width,
-     * based on http://unicode.org/emoji/charts/emoji-list.html */
-    static struct interval emoji_width[] =
-    {
-	{0x1f1e6, 0x1f1ff},
-	{0x1f321, 0x1f321},
-	{0x1f324, 0x1f32c},
-	{0x1f336, 0x1f336},
-	{0x1f37d, 0x1f37d},
-	{0x1f396, 0x1f397},
-	{0x1f399, 0x1f39b},
-	{0x1f39e, 0x1f39f},
-	{0x1f3cb, 0x1f3ce},
-	{0x1f3d4, 0x1f3df},
-	{0x1f3f3, 0x1f3f5},
-	{0x1f3f7, 0x1f3f7},
-	{0x1f43f, 0x1f43f},
-	{0x1f441, 0x1f441},
-	{0x1f4fd, 0x1f4fd},
-	{0x1f549, 0x1f54a},
-	{0x1f56f, 0x1f570},
-	{0x1f573, 0x1f579},
-	{0x1f587, 0x1f587},
-	{0x1f58a, 0x1f58d},
-	{0x1f590, 0x1f590},
-	{0x1f5a5, 0x1f5a5},
-	{0x1f5a8, 0x1f5a8},
-	{0x1f5b1, 0x1f5b2},
-	{0x1f5bc, 0x1f5bc},
-	{0x1f5c2, 0x1f5c4},
-	{0x1f5d1, 0x1f5d3},
-	{0x1f5dc, 0x1f5de},
-	{0x1f5e1, 0x1f5e1},
-	{0x1f5e3, 0x1f5e3},
-	{0x1f5e8, 0x1f5e8},
-	{0x1f5ef, 0x1f5ef},
-	{0x1f5f3, 0x1f5f3},
-	{0x1f5fa, 0x1f5fa},
-	{0x1f6cb, 0x1f6cf},
-	{0x1f6e0, 0x1f6e5},
-	{0x1f6e9, 0x1f6e9},
-	{0x1f6f0, 0x1f6f0},
-	{0x1f6f3, 0x1f6f3}
     };
 
     if (c >= 0x100)
@@ -2598,6 +2599,11 @@ utf_printable(int c)
 	{0xfffe, 0xffff}
     };
 
+# if defined(MSWIN) && !defined(FEAT_GUI)
+    if (utf_isemoji(c))
+	return 0;
+# endif
+
     return !intable(nonprint, sizeof(nonprint), c);
 #endif
 }
@@ -2881,6 +2887,13 @@ utf_ambiguous_width(int c)
 {
     return c >= 0x80 && (intable(ambiguous, sizeof(ambiguous), c)
 	    || intable(emoji_all, sizeof(emoji_all), c));
+}
+
+    static int
+utf_isemoji(int c)
+{
+    return c >= 0x80 && intable(emoji_width, sizeof(emoji_width), c)
+	    || intable(emoji_all, sizeof(emoji_all), c);
 }
 
 /*
