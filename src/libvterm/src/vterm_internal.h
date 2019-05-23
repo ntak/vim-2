@@ -152,6 +152,8 @@ struct VTermState
       unsigned int cursor_shape:2;
     } mode;
   } saved;
+
+  VTermTtyType ttytype;
 };
 
 typedef enum {

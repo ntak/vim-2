@@ -3944,7 +3944,7 @@ static VTermAllocatorFunctions vterm_allocator = {
  * Return FAIL when out of memory.
  */
     static int
-create_vterm(term_T *term, int rows, int cols)
+create_vterm(term_T *term, int rows, int cols, int ttytype)
 {
     VTerm	    *vterm;
     VTermScreen	    *screen;
@@ -4000,6 +4000,18 @@ create_vterm(term_T *term, int rows, int cols)
 #endif
     vterm_state_set_termprop(state, VTERM_PROP_CURSORBLINK, &value);
     vterm_state_set_unrecognised_fallbacks(state, &parser_fallbacks, term);
+
+    switch (ttytype)
+    {
+	case 0: default:
+	    vterm_state_set_ttytype(state, VTERM_TTYTYPE_USUAL);
+	    break;
+	case 1:
+	    vterm_state_set_ttytype(state, VTERM_TTYTYPE_WINPTY);
+	    break;
+	case 2:
+	    vterm_state_set_ttytype(state, VTERM_TTYTYPE_CONPTY);
+    }
 
     return OK;
 }
@@ -5906,7 +5918,7 @@ conpty_term_and_job_init(
     vim_free(cwd_wchar);
     vim_free(env_wchar);
 
-    if (create_vterm(term, term->tl_rows, term->tl_cols) == FAIL)
+    if (create_vterm(term, term->tl_rows, term->tl_cols, 2) == FAIL)
 	goto failed;
 
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
@@ -6236,7 +6248,7 @@ winpty_term_and_job_init(
     vim_free(cwd_wchar);
     vim_free(env_wchar);
 
-    if (create_vterm(term, term->tl_rows, term->tl_cols) == FAIL)
+    if (create_vterm(term, term->tl_rows, term->tl_cols, 1) == FAIL)
 	goto failed;
 
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
@@ -6378,7 +6390,7 @@ create_pty_only(term_T *term, jobopt_T *options)
     char	    in_name[80], out_name[80];
     channel_T	    *channel = NULL;
 
-    if (create_vterm(term, term->tl_rows, term->tl_cols) == FAIL)
+    if (create_vterm(term, term->tl_rows, term->tl_cols, 0) == FAIL)
 	return FAIL;
 
     vim_snprintf(in_name, sizeof(in_name), "\\\\.\\pipe\\vim-%d-in-%d",
@@ -6496,7 +6508,7 @@ term_and_job_init(
 {
     term->tl_arg0_cmd = NULL;
 
-    if (create_vterm(term, term->tl_rows, term->tl_cols) == FAIL)
+    if (create_vterm(term, term->tl_rows, term->tl_cols, 0) == FAIL)
 	return FAIL;
 
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
@@ -6519,7 +6531,7 @@ term_and_job_init(
     static int
 create_pty_only(term_T *term, jobopt_T *opt)
 {
-    if (create_vterm(term, term->tl_rows, term->tl_cols) == FAIL)
+    if (create_vterm(term, term->tl_rows, term->tl_cols, 0) == FAIL)
 	return FAIL;
 
     term->tl_job = job_alloc();

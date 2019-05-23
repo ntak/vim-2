@@ -155,6 +155,14 @@ enum {
   VTERM_N_PROP_MOUSES
 };
 
+typedef enum {
+  VTERM_TTYTYPE_USUAL = 0,
+  VTERM_TTYTYPE_WINPTY,
+  VTERM_TTYTYPE_CONPTY,
+
+  VTERM_N_TTYTYPES
+} VTermTtyType;
+
 typedef struct {
   const uint32_t *chars;
   int             width;
@@ -306,6 +314,7 @@ int  vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val
 void vterm_state_focus_in(VTermState *state);
 void vterm_state_focus_out(VTermState *state);
 const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row);
+void vterm_state_set_ttytype(VTermState *state, VTermTtyType ttytype);
 
 // ------------
 // Screen layer

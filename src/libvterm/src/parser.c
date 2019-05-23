@@ -124,6 +124,7 @@ static void done_string(VTerm *vt, const char *str, size_t len)
 
 size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
 {
+  VTermState *state = vterm_obtain_state(vt);
   size_t pos = 0;
   const char *string_start = NULL;  /* init to avoid gcc warning */
 
@@ -175,7 +176,8 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
       // fallthrough
     }
     else if(c < 0x20) { // other C0
-      if(vterm_get_special_pty_type() == 2) {
+      if(vterm_get_special_pty_type() == 2 &&
+	 state->ttytype == VTERM_TTYTYPE_CONPTY) {
         if(c == 0x08) // BS
           // Set the trick for BS output after a sequence, to delay backspace
           // activation
