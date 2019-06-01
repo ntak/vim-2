@@ -3623,3 +3623,28 @@ typedef enum {
     CDSCOPE_TABPAGE,	// :tcd
     CDSCOPE_WINDOW	// :lcd
 } cdscope_T;
+
+#ifdef TERMINAL
+typedef struct
+{
+    int	    wtbu_dummy;
+} wterm_buffer_T;
+
+typedef struct
+{
+    int	    wtsc_dummy;
+} wterm_screen_T;
+
+typedef struct
+{
+    int	    wtsi_rows;
+    int	    wtsi_cols;
+} wterm_size_T;
+
+typedef struct
+{
+    wterm_buffer_T  wt_buffer;
+    wterm_screen_T  wt_screen;
+    wterm_size_T    wt_size;
+} wterm_T;
+#endif

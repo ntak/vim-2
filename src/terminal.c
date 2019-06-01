@@ -87,7 +87,13 @@ typedef struct _DYN_STARTUPINFOEXW
 struct terminal_S {
     term_T	*tl_next;
 
+#ifdef FEAT_WTERM
+    wterm_T	*tl_wterm;
+    wterm_size_T *tl_size;
+#else
     VTerm	*tl_vterm;
+#endif
+
     job_T	*tl_job;
     buf_T	*tl_buffer;
 #if defined(FEAT_GUI)
@@ -644,8 +650,14 @@ term_start(
     if (res == OK)
     {
 	/* Get and remember the size we ended up with.  Update the pty. */
+#ifdef FEAT_WTERM
+	wterm_size_get(term->tl_wterm, &term->tl_size);
+	term_report_winsize(term, term->tl_size.wts_rows,
+						       term->tl_size.wts_cols);
+#else
 	vterm_get_size(term->tl_vterm, &term->tl_rows, &term->tl_cols);
 	term_report_winsize(term, term->tl_rows, term->tl_cols);
+#endif
 #ifdef FEAT_GUI
 	if (term->tl_system)
 	{
@@ -967,6 +979,33 @@ get_tty_part(term_T *term)
 /*
  * Write job output "msg[len]" to the vterm.
  */
+#ifdef FEAT_WTERM
+    static void
+term_write_job_output(term_T *term, char_u *msg, size_t len)
+{
+    wterm_T	    wt = term->tl_wterm;
+    wterm_buffer_T  *wtb = wterm_buffer(wt);
+    size_t	    prevlen = wterm_buffer_get_current(wtb);
+
+    wterm_buffer_input_write(wtb, (char *)msg, len);
+
+    /* flush vterm buffer when vterm responded to control sequence */
+    if (prevlen != wterm_buffer_get_current(wtb))
+    {
+	char	buf[KEY_BUF_LEN];
+	size_t	curlen = wterm_buffer_output_read(wtb, buf, KEY_BUF_LEN);
+
+	if (curlen > 0)
+	    channel_send(term->tl_job->jv_channel, get_tty_part(term),
+					     (char_u *)buf, (int)curlen, NULL);
+    }
+
+    /* this invokes the damage callbacks */
+    wterm_screen_flush(wterm_screen_obtain(wt));
+}
+
+#else
+
     static void
 term_write_job_output(term_T *term, char_u *msg, size_t len)
 {
@@ -989,6 +1028,7 @@ term_write_job_output(term_T *term, char_u *msg, size_t len)
     /* this invokes the damage callbacks */
     vterm_screen_flush_damage(vterm_obtain_screen(vterm));
 }
+#endif
 
     static void
 update_cursor(term_T *term, int redraw)
@@ -1021,6 +1061,62 @@ update_cursor(term_T *term, int redraw)
  * Invoked when "msg" output from a job was received.  Write it to the terminal
  * of "buffer".
  */
+#ifdef FEAT_WTERM
+    void
+write_to_term(buf_T *buffer, char_u *msg, channel_T *channel)
+{
+    size_t	len = STRLEN(msg);
+    term_T	*term = buffer->b_term;
+
+#ifdef MSWIN
+    /* Win32: Cannot redirect output of the job, intercept it here and write to
+     * the file. */
+    if (term->tl_out_fd != NULL)
+    {
+	ch_log(channel, "Writing %d bytes to output file", (int)len);
+	fwrite(msg, len, 1, term->tl_out_fd);
+	return;
+    }
+#endif
+
+    if (term->tl_wterm == NULL)
+    {
+	ch_log(channel, "NOT writing %d bytes to terminal", (int)len);
+	return;
+    }
+    ch_log(channel, "writing %d bytes to terminal", (int)len);
+    term_write_job_output(term, msg, len);
+
+#ifdef FEAT_GUI
+    if (term->tl_system)
+    {
+	/* show system output, scrolling up the screen as needed */
+	update_system_term(term);
+	update_cursor(term, TRUE);
+    }
+    else
+#endif
+    /* In Terminal-Normal mode we are displaying the buffer, not the terminal
+     * contents, thus no screen update is needed. */
+    if (!term->tl_normal_mode)
+    {
+	// Don't use update_screen() when editing the command line, it gets
+	// cleared.
+	// TODO: only update once in a while.
+	ch_log(term->tl_job->jv_channel, "updating screen");
+	if (buffer == curbuf && (State & CMDLINE) == 0)
+	{
+	    update_screen(VALID_NO_UPDATE);
+	    /* update_screen() can be slow, check the terminal wasn't closed
+	     * already */
+	    if (buffer == curbuf && curbuf->b_term != NULL)
+		update_cursor(curbuf->b_term, TRUE);
+	}
+	else
+	    redraw_after_callback(TRUE);
+    }
+}
+#else
     void
 write_to_term(buf_T *buffer, char_u *msg, channel_T *channel)
 {
@@ -1075,6 +1171,7 @@ write_to_term(buf_T *buffer, char_u *msg, channel_T *channel)
 	    redraw_after_callback(TRUE);
     }
 }
+#endif
 
 /*
  * Send a mouse position and click to the vterm
@@ -1194,6 +1291,216 @@ term_mouse_click(VTerm *vterm, int key)
  * Convert typed key "c" into bytes to send to the job.
  * Return the number of bytes in "buf".
  */
+#ifdef FEAT_WTERM
+typedef struct
+{
+    int code;
+    wterm_key_T		key;
+    wterm_modifier_T	mod;
+} term_convert_key_T;
+term_convert_key_T term_convert_key_tbl[] =
+{
+    { K_LEFTRELEASE_NM,	},
+    { ESC,		WTERM_KEY_ESCAPE,	    WTERM_KEY_NONE  },
+    { K_DEL,		WTERM_KEY_DEL,	            WTERM_KEY_NONE  },
+    { K_DOWN,		WTERM_KEY_DOWN,	            WTERM_KEY_NONE  },
+    { K_S_DOWN,		WTERM_KEY_DOWN,	            WTERM_MOD_SHIFT },
+    { K_END,		WTERM_KEY_END,	            WTERM_KEY_NONE  },
+    { K_S_END,		WTERM_KEY_END,	            WTERM_MOD_SHIFT },
+    { K_C_END,		WTERM_KEY_END,	            WTERM_MOD_CTRL  },
+    { K_HOME,		WTERM_KEY_HOME,	            WTERM_KEY_NONE  },
+    { K_S_HOME,		WTERM_KEY_HOME,	            WTERM_MOD_SHIFT },
+    { K_C_HOME,		WTERM_KEY_HOME,	            WTERM_MOD_CTRL  },
+    { K_INS,		WTERM_KEY_INS,	            WTERM_KEY_NONE  },
+    { K_K0,		WTERM_KEY_KP_0,	            WTERM_KEY_NONE  },
+    { K_K1,		WTERM_KEY_KP_1,	            WTERM_KEY_NONE  },
+    { K_K2,		WTERM_KEY_KP_2,	            WTERM_KEY_NONE  },
+    { K_K3,		WTERM_KEY_KP_3,	            WTERM_KEY_NONE  },
+    { K_K4,		WTERM_KEY_KP_4,	            WTERM_KEY_NONE  },
+    { K_K5,		WTERM_KEY_KP_5,	            WTERM_KEY_NONE  },
+    { K_K6,		WTERM_KEY_KP_6,	            WTERM_KEY_NONE  },
+    { K_K7,		WTERM_KEY_KP_7,	            WTERM_KEY_NONE  },
+    { K_K8,		WTERM_KEY_KP_8,	            WTERM_KEY_NONE  },
+    { K_K9,		WTERM_KEY_KP_9,	            WTERM_KEY_NONE  },
+    { K_K0,		WTERM_KEY_KP_0,	            WTERM_KEY_NONE  },
+    { K_KDEL,		WTERM_KEY_DEL,	            WTERM_KEY_NONE  }, /*TODO*/
+    { K_KDIVIDE,	WTERM_KEY_KP_DIVIDE,        WTERM_KEY_NONE  },
+    { K_KEND,		WTERM_KEY_KP_1,		    WTERM_KEY_NONE  }, /*TODO*/
+    { K_KENTER,		WTERM_KEY_KP_ENTER,	    WTERM_KEY_NONE  },
+    { K_KHOME,		WTERM_KEY_KP_7,		    WTERM_KEY_NONE  }, /*TODO*/
+    { K_KINS,		WTERM_KEY_KP_0,		    WTERM_KEY_NONE  }, /*TODO*/
+    { K_KMINUS,		WTERM_KEY_KP_MINUS,	    WTERM_KEY_NONE  },
+    {
+};
+
+    static int
+term_convert_key(term_T *term, int c, char *buf)
+{
+    wterm_T		*wt = term->tl_wterm;
+    wterm_key_T		key = WTERM_KEY_NONE;
+    wterm_modifier_T	mod = WTERM_KEY_NONE;
+    int			other = FALSE;
+    int			init = FALSE;
+
+    if (!init)
+    {
+
+    }
+
+    switch (c)
+    {
+	/* don't use VTERM_KEY_ENTER, it may do an unwanted conversion */
+
+				/* don't use VTERM_KEY_BACKSPACE, it always
+				 * becomes 0x7f DEL */
+	case K_BS:		c = term_backspace_char; break;
+
+	case ESC:		key = VTERM_KEY_ESCAPE; break;
+	case K_DEL:		key = VTERM_KEY_DEL; break;
+	case K_DOWN:		key = VTERM_KEY_DOWN; break;
+	case K_S_DOWN:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_DOWN; break;
+	case K_END:		key = VTERM_KEY_END; break;
+	case K_S_END:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_END; break;
+	case K_C_END:		mod = VTERM_MOD_CTRL;
+				key = VTERM_KEY_END; break;
+	case K_F10:		key = VTERM_KEY_FUNCTION(10); break;
+	case K_F11:		key = VTERM_KEY_FUNCTION(11); break;
+	case K_F12:		key = VTERM_KEY_FUNCTION(12); break;
+	case K_F1:		key = VTERM_KEY_FUNCTION(1); break;
+	case K_F2:		key = VTERM_KEY_FUNCTION(2); break;
+	case K_F3:		key = VTERM_KEY_FUNCTION(3); break;
+	case K_F4:		key = VTERM_KEY_FUNCTION(4); break;
+	case K_F5:		key = VTERM_KEY_FUNCTION(5); break;
+	case K_F6:		key = VTERM_KEY_FUNCTION(6); break;
+	case K_F7:		key = VTERM_KEY_FUNCTION(7); break;
+	case K_F8:		key = VTERM_KEY_FUNCTION(8); break;
+	case K_F9:		key = VTERM_KEY_FUNCTION(9); break;
+	case K_HOME:		key = VTERM_KEY_HOME; break;
+	case K_S_HOME:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_HOME; break;
+	case K_C_HOME:		mod = VTERM_MOD_CTRL;
+				key = VTERM_KEY_HOME; break;
+	case K_INS:		key = VTERM_KEY_INS; break;
+	case K_K0:		key = VTERM_KEY_KP_0; break;
+	case K_K1:		key = VTERM_KEY_KP_1; break;
+	case K_K2:		key = VTERM_KEY_KP_2; break;
+	case K_K3:		key = VTERM_KEY_KP_3; break;
+	case K_K4:		key = VTERM_KEY_KP_4; break;
+	case K_K5:		key = VTERM_KEY_KP_5; break;
+	case K_K6:		key = VTERM_KEY_KP_6; break;
+	case K_K7:		key = VTERM_KEY_KP_7; break;
+	case K_K8:		key = VTERM_KEY_KP_8; break;
+	case K_K9:		key = VTERM_KEY_KP_9; break;
+	case K_KDEL:		key = VTERM_KEY_DEL; break; /* TODO */
+	case K_KDIVIDE:		key = VTERM_KEY_KP_DIVIDE; break;
+	case K_KEND:		key = VTERM_KEY_KP_1; break; /* TODO */
+	case K_KENTER:		key = VTERM_KEY_KP_ENTER; break;
+	case K_KHOME:		key = VTERM_KEY_KP_7; break; /* TODO */
+	case K_KINS:		key = VTERM_KEY_KP_0; break; /* TODO */
+	case K_KMINUS:		key = VTERM_KEY_KP_MINUS; break;
+	case K_KMULTIPLY:	key = VTERM_KEY_KP_MULT; break;
+	case K_KPAGEDOWN:	key = VTERM_KEY_KP_3; break; /* TODO */
+	case K_KPAGEUP:		key = VTERM_KEY_KP_9; break; /* TODO */
+	case K_KPLUS:		key = VTERM_KEY_KP_PLUS; break;
+	case K_KPOINT:		key = VTERM_KEY_KP_PERIOD; break;
+	case K_LEFT:		key = VTERM_KEY_LEFT; break;
+	case K_S_LEFT:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_LEFT; break;
+	case K_C_LEFT:		mod = VTERM_MOD_CTRL;
+				key = VTERM_KEY_LEFT; break;
+	case K_PAGEDOWN:	key = VTERM_KEY_PAGEDOWN; break;
+	case K_PAGEUP:		key = VTERM_KEY_PAGEUP; break;
+	case K_RIGHT:		key = VTERM_KEY_RIGHT; break;
+	case K_S_RIGHT:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_RIGHT; break;
+	case K_C_RIGHT:		mod = VTERM_MOD_CTRL;
+				key = VTERM_KEY_RIGHT; break;
+	case K_UP:		key = VTERM_KEY_UP; break;
+	case K_S_UP:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_UP; break;
+	case TAB:		key = VTERM_KEY_TAB; break;
+	case K_S_TAB:		mod = VTERM_MOD_SHIFT;
+				key = VTERM_KEY_TAB; break;
+
+	case K_MOUSEUP:		other = term_send_mouse(vterm, 5, 1); break;
+	case K_MOUSEDOWN:	other = term_send_mouse(vterm, 4, 1); break;
+	case K_MOUSELEFT:	/* TODO */ return 0;
+	case K_MOUSERIGHT:	/* TODO */ return 0;
+
+	case K_LEFTMOUSE:
+	case K_LEFTMOUSE_NM:
+	case K_LEFTDRAG:
+	case K_LEFTRELEASE:
+	case K_LEFTRELEASE_NM:
+	case K_MOUSEMOVE:
+	case K_MIDDLEMOUSE:
+	case K_MIDDLEDRAG:
+	case K_MIDDLERELEASE:
+	case K_RIGHTMOUSE:
+	case K_RIGHTDRAG:
+	case K_RIGHTRELEASE:	if (!term_mouse_click(vterm, c))
+				    return 0;
+				other = TRUE;
+				break;
+
+	case K_X1MOUSE:		/* TODO */ return 0;
+	case K_X1DRAG:		/* TODO */ return 0;
+	case K_X1RELEASE:	/* TODO */ return 0;
+	case K_X2MOUSE:		/* TODO */ return 0;
+	case K_X2DRAG:		/* TODO */ return 0;
+	case K_X2RELEASE:	/* TODO */ return 0;
+
+	case K_IGNORE:		return 0;
+	case K_NOP:		return 0;
+	case K_UNDO:		return 0;
+	case K_HELP:		return 0;
+	case K_XF1:		key = VTERM_KEY_FUNCTION(1); break;
+	case K_XF2:		key = VTERM_KEY_FUNCTION(2); break;
+	case K_XF3:		key = VTERM_KEY_FUNCTION(3); break;
+	case K_XF4:		key = VTERM_KEY_FUNCTION(4); break;
+	case K_SELECT:		return 0;
+#ifdef FEAT_GUI
+	case K_VER_SCROLLBAR:	return 0;
+	case K_HOR_SCROLLBAR:	return 0;
+#endif
+#ifdef FEAT_GUI_TABLINE
+	case K_TABLINE:		return 0;
+	case K_TABMENU:		return 0;
+#endif
+#ifdef FEAT_NETBEANS_INTG
+	case K_F21:		key = VTERM_KEY_FUNCTION(21); break;
+#endif
+#ifdef FEAT_DND
+	case K_DROP:		return 0;
+#endif
+	case K_CURSORHOLD:	return 0;
+	case K_PS:		vterm_keyboard_start_paste(vterm);
+				other = TRUE;
+				break;
+	case K_PE:		vterm_keyboard_end_paste(vterm);
+				other = TRUE;
+				break;
+    }
+
+    /*
+     * Convert special keys to vterm keys:
+     * - Write keys to vterm: vterm_keyboard_key()
+     * - Write output to channel.
+     * TODO: use mod_mask
+     */
+    if (key != VTERM_KEY_NONE)
+	/* Special key, let vterm convert it. */
+	vterm_keyboard_key(vterm, key, mod);
+    else if (!other)
+	/* Normal character, let vterm convert it. */
+	vterm_keyboard_unichar(vterm, c, mod);
+
+    /* Read back the converted escape sequence. */
+    return (int)vterm_output_read(vterm, buf, KEY_BUF_LEN);
+}
+#else
     static int
 term_convert_key(term_T *term, int c, char *buf)
 {
@@ -1355,6 +1662,7 @@ term_convert_key(term_T *term, int c, char *buf)
     /* Read back the converted escape sequence. */
     return (int)vterm_output_read(vterm, buf, KEY_BUF_LEN);
 }
+#endif
 
 /*
  * Return TRUE if the job for "term" is still running.

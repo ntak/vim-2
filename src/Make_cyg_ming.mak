@@ -759,7 +759,8 @@ OBJ = \
 	$(OUTDIR)/userfunc.o \
 	$(OUTDIR)/version.o \
 	$(OUTDIR)/winclip.o \
-	$(OUTDIR)/window.o
+	$(OUTDIR)/window.o \
+	$(OUTDIR)/wterm.o
 
 ifeq ($(VIMDLL),yes)
 OBJ += $(OUTDIR)/os_w32dll.o $(OUTDIR)/vimrcd.o

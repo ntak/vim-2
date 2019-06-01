@@ -1641,6 +1641,7 @@ BASIC_SRC = \
 	userfunc.c \
 	version.c \
 	window.c \
+	wterm.c \
 	$(OS_EXTRA_SRC)
 
 SRC =	$(BASIC_SRC) \
@@ -1756,6 +1757,7 @@ OBJ_COMMON = \
 	objects/userfunc.o \
 	objects/version.o \
 	objects/window.o \
+	objects/wterm.o \
 	$(GUI_OBJ) \
 	$(TERM_OBJ) \
 	$(LUA_OBJ) \
@@ -1897,6 +1899,7 @@ PRO_AUTO = \
 	userfunc.pro \
 	version.pro \
 	window.pro \
+	wterm.pro \
 	beval.pro \
 	gui_beval.pro \
 	netbeans.pro \
@@ -3270,6 +3273,9 @@ objects/userfunc.o: userfunc.c
 objects/window.o: window.c
 	$(CCC) -o $@ window.c
 
+objects/wterm.o: wterm.c
+	$(CCC) -o $@ wterm.c
+
 objects/netbeans.o: netbeans.c
 	$(CCC) -o $@ netbeans.c
 
@@ -3700,6 +3706,10 @@ objects/version.o: version.c vim.h protodef.h auto/config.h feature.h os_unix.h 
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h version.h
 objects/window.o: window.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
+objects/wterm.o: wterm.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h

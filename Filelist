@@ -108,6 +108,7 @@ SRC_ALL =	\
 		src/vim.h \
 		src/winclip.c \
 		src/window.c \
+		src/wterm.c \
 		src/tee/tee.c \
 		src/xxd/xxd.c \
 		src/testdir/gen_opt_test.vim \
@@ -223,6 +224,7 @@ SRC_ALL =	\
 		src/proto/version.pro \
 		src/proto/winclip.pro \
 		src/proto/window.pro \
+		src/proto/wterm.pro \
 		src/libvterm/.bzrignore \
 		src/libvterm/.gitignore \
 		src/libvterm/LICENSE \

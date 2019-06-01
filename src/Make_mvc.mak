@@ -203,6 +203,9 @@ OBJDIR = $(OBJDIR)V
 !if "$(DEBUG)" == "yes"
 OBJDIR = $(OBJDIR)d
 !endif
+!if "$(WTERM)" == "yes"
+OBJDIR = $(OBJDIR)W
+!endif
 
 # If you include Win32.mak, it requires that CPU be set appropriately.
 # To cross-compile for Win64, set CPU=AMD64 or CPU=IA64.
@@ -462,6 +465,10 @@ CHANNEL_DEFS	= -DFEAT_JOB_CHANNEL
 NETBEANS_LIB	= WSock32.lib
 !endif
 
+!if "$(WTERM)" == "yes"
+WTERM_DEFS	= -DFEAT_WTERM
+!endif
+
 # Set which version of the CRT to use
 !if defined(USE_MSVCRT)
 # CVARS = $(cvarsdll)
@@ -495,7 +502,7 @@ WINVER = 0x0501
 
 CFLAGS = -c /W3 /nologo $(CVARS) -I. -Iproto -DHAVE_PATHDEF -DWIN32 \
 		$(CSCOPE_DEFS) $(TERM_DEFS) $(NETBEANS_DEFS) $(CHANNEL_DEFS) \
-		$(NBDEBUG_DEFS) $(XPM_DEFS) \
+		$(NBDEBUG_DEFS) $(XPM_DEFS) $(WTERM_DEFS) \
 		$(DEFINES) -DWINVER=$(WINVER) -D_WIN32_WINNT=$(WINVER)
 
 #>>>>> end of choices
@@ -762,6 +769,7 @@ OBJ = \
 	$(OUTDIR)\userfunc.obj \
 	$(OUTDIR)\winclip.obj \
 	$(OUTDIR)\window.obj \
+	$(OUTDIR)\wterm.obj \
 
 !if "$(VIMDLL)" == "yes"
 OBJ = $(OBJ) $(OUTDIR)\os_w32dll.obj $(OUTDIR)\vimd.res
@@ -1612,6 +1620,8 @@ $(OUTDIR)/userfunc.obj:	$(OUTDIR) userfunc.c  $(INCL)
 
 $(OUTDIR)/window.obj:	$(OUTDIR) window.c  $(INCL)
 
+$(OUTDIR)/wterm.obj:	$(OUTDIR) wterm.c  $(INCL)
+
 $(OUTDIR)/xpm_w32.obj: $(OUTDIR) xpm_w32.c
 	$(CC) $(CFLAGS_OUTDIR) $(XPM_INC) xpm_w32.c
 
@@ -1766,6 +1776,7 @@ proto.h: \
 	proto/usercmd.pro \
 	proto/userfunc.pro \
 	proto/window.pro \
+	proto/wterm.pro \
 	$(NETBEANS_PRO) \
 	$(CHANNEL_PRO)
 
