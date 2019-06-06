@@ -2739,6 +2739,15 @@ static struct vimoption options[] =
 			    {(char_u *)NULL, (char_u *)0L}
 #endif
 			    SCTX_INIT},
+    {"termwinterm", "twte", P_STRING|P_ALLOCED|P_VI_DEF,
+#if defined(FEAT_TERMINAL)
+			    (char_u *)&p_twte, PV_NONE,
+			    {(char_u *)"vterm", (char_u *)NULL}
+#else
+			    (char_u *)NULL, PV_NONE,
+			    {(char_u *)NULL, (char_u *)0L}
+#endif
+			    SCTX_INIT},
     {"termwintype", "twt",  P_STRING|P_ALLOCED|P_VI_DEF,
 #if defined(MSWIN) && defined(FEAT_TERMINAL)
 			    (char_u *)&p_twt, PV_NONE,
@@ -3235,6 +3244,9 @@ static char *(p_scl_values[]) = {"yes", "no", "auto", "number", NULL};
 #endif
 #if defined(MSWIN) && defined(FEAT_TERMINAL)
 static char *(p_twt_values[]) = {"winpty", "conpty", "", NULL};
+#endif
+#if defined(FEAT_TERMINAL)
+static char *(p_twte_values[]) = {"vterm", "wterm", NULL};
 #endif
 
 static void set_options_default(int opt_flags);
@@ -7741,6 +7753,12 @@ did_set_string_option(
 	    errmsg = e_invarg;
     }
 # endif
+    // 'termwinterm'
+    else if (varp == &p_twte)
+    {
+	if (check_opt_strings(*varp, p_twte_values, FALSE) != OK)
+	    errmsg = e_invarg;
+    }
 #endif
 
 #ifdef FEAT_VARTABS

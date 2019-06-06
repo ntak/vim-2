@@ -7074,6 +7074,10 @@ f_has(typval_T *argvars, typval_T *rettv)
 	else if (STRICMP(name, "conpty") == 0)
 	    n = use_conpty();
 #endif
+#if defined(FEAT_TERMINAL)
+	else if (STRICMP(name, "wterm") == 0)
+	    n = use_wterm();
+#endif
     }
 
     rettv->vval.v_number = n;

@@ -177,6 +177,8 @@ static BOOL has_winpty = FALSE;
 static BOOL has_conpty = FALSE;
 #endif
 
+static BOOL using_wterm = FALSE;
+
 #define MAX_ROW 999999	    /* used for tl_dirty_row_end to update all rows */
 #define KEY_BUF_LEN 200
 
@@ -768,6 +770,24 @@ ex_terminal(exarg_T *eap)
 	    opt.jo_tty_type = tty_type;
 	}
 #endif
+	else if ((int)(p - cmd) == 4 && STRNICMP(cmd, "term", 4) == 0
+								 && ep != NULL)
+	{
+	    int term_type = NUL;
+
+	    p = skiptowhite(cmd);
+	    if (STRNICMP(ep + 1, "vterm", p - (ep + 1)) == 0)
+		term_type = 'v';
+	    else if (STRNICMP(ep + 1, "wterm", p - (ep + 1)) == 0)
+		term_type = 'w';
+	    else
+	    {
+		semsg(e_invargval, "term");
+		goto theend;
+	    }
+	    opt.jo_set2 |= JO2_TERM_TYPE;
+	    opt.jo_term_type = term_type;
+	}
 	else
 	{
 	    if (*p)
@@ -828,6 +848,8 @@ term_write_session(FILE *fd, win_T *wp)
     if (fprintf(fd, "++type=%s ", term->tl_job->jv_tty_type) < 0)
 	return FAIL;
 #endif
+    if (fprintf(fd, "++term=%s ", term->tl_job->jv_term_type) < 0)
+	return FAIL;
     if (term->tl_command != NULL && fputs((char *)term->tl_command, fd) < 0)
 	return FAIL;
 
@@ -5590,7 +5612,7 @@ f_term_start(typval_T *argvars, typval_T *rettv)
 		    + JO2_TERM_COLS + JO2_TERM_ROWS + JO2_VERTICAL + JO2_CURWIN
 		    + JO2_CWD + JO2_ENV + JO2_EOF_CHARS
 		    + JO2_NORESTORE + JO2_TERM_KILL
-		    + JO2_ANSI_COLORS + JO2_TTY_TYPE) == FAIL)
+		    + JO2_ANSI_COLORS + JO2_TTY_TYPE + JO2_TERM_TYPE) == FAIL)
 	return;
 
     buf = term_start(&argvars[0], NULL, &opt, 0);
@@ -6028,6 +6050,12 @@ term_free_conpty(term_T *term)
 use_conpty(void)
 {
     return has_conpty;
+}
+
+    int
+use_wterm(void)
+{
+    return using_wterm;
 }
 
 #  ifndef PROTO

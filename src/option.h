@@ -829,6 +829,9 @@ EXTERN int	p_tgc;		/* 'termguicolors' */
 #if defined(MSWIN) && defined(FEAT_TERMINAL)
 EXTERN char_u	*p_twt;		// 'termwintype'
 #endif
+#if defined(FEAT_TERMINAL)
+EXTERN char_u	*p_twte;	// 'termwinterm'
+#endif
 EXTERN int	p_terse;	/* 'terse' */
 EXTERN int	p_ta;		/* 'textauto' */
 EXTERN int	p_to;		/* 'tildeop' */

@@ -59,4 +59,5 @@ job_T *term_getjob(term_T *term);
 void term_free_conpty(term_T *term);
 int use_conpty(void);
 int terminal_enabled(void);
+int use_wterm(void);
 /* vim: set ft=c : */

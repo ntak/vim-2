@@ -5033,6 +5033,26 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		}
 		opt->jo_tty_type = p[0];
 	    }
+	    else if (STRCMP(hi->hi_key, "term_type") == 0)
+	    {
+		char_u *p;
+
+		if (!(supported2 & JO2_TERM_TYPE))
+		    break;
+		opt->jo_set2 |= JO2_TERM_TYPE;
+		p = tv_get_string_chk(item);
+		if (p == NULL)
+		{
+		    semsg(_(e_invargval), "term_type");
+		    return FAIL;
+		}
+		if (!(STRCMP(p, "vterm" == 0) || STRCMP(p, "wterm" == 0)))
+		{
+		    semsg(_(e_invargval), "term_type");
+		    return FAIL;
+		}
+		opt->jo_term_type = p[0];
+	    }
 # if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 	    else if (STRCMP(hi->hi_key, "ansi_colors") == 0)
 	    {
@@ -5261,6 +5281,7 @@ job_free_contents(job_T *job)
 #ifdef MSWIN
     vim_free(job->jv_tty_type);
 #endif
+    vim_free(job->jv_term_type);
     free_callback(&job->jv_exit_cb);
     if (job->jv_argv != NULL)
     {
@@ -6015,6 +6036,7 @@ job_info(job_T *job, dict_T *dict)
 #ifdef MSWIN
     dict_add_string(dict, "tty_type", job->jv_tty_type);
 #endif
+    dict_add_string(dict, "term_type", job->jv_term_type);
 
     l = list_alloc();
     if (l != NULL)
