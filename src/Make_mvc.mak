@@ -779,6 +779,7 @@ OBJ = \
 	$(OUTDIR)\userfunc.obj \
 	$(OUTDIR)\winclip.obj \
 	$(OUTDIR)\window.obj \
+	$(OUTDIR)\wterm.obj \
 
 !if "$(VIMDLL)" == "yes"
 OBJ = $(OBJ) $(OUTDIR)\os_w32dll.obj $(OUTDIR)\vimd.res
@@ -1629,6 +1630,8 @@ $(OUTDIR)/userfunc.obj:	$(OUTDIR) userfunc.c  $(INCL)
 
 $(OUTDIR)/window.obj:	$(OUTDIR) window.c  $(INCL)
 
+$(OUTDIR)/wterm.obj:	$(OUTDIR) wterm.c  $(INCL)
+
 $(OUTDIR)/xpm_w32.obj: $(OUTDIR) xpm_w32.c
 	$(CC) $(CFLAGS_OUTDIR) $(XPM_INC) xpm_w32.c
 
@@ -1783,6 +1786,7 @@ proto.h: \
 	proto/usercmd.pro \
 	proto/userfunc.pro \
 	proto/window.pro \
+	proto/wterm.pro \
 	$(SOUND_PRO) \
 	$(NETBEANS_PRO) \
 	$(CHANNEL_PRO)

@@ -1647,6 +1647,7 @@ BASIC_SRC = \
 	userfunc.c \
 	version.c \
 	window.c \
+	wterm.c \
 	$(OS_EXTRA_SRC)
 
 SRC =	$(BASIC_SRC) \
@@ -1763,6 +1764,7 @@ OBJ_COMMON = \
 	objects/userfunc.o \
 	objects/version.o \
 	objects/window.o \
+	objects/wterm.o \
 	$(GUI_OBJ) \
 	$(TERM_OBJ) \
 	$(LUA_OBJ) \
@@ -1909,6 +1911,7 @@ PRO_AUTO = \
 	gui_beval.pro \
 	netbeans.pro \
 	channel.pro \
+	wterm.pro \
 	$(ALL_GUI_PRO) \
 	$(TCL_PRO)
 
@@ -3288,6 +3291,9 @@ objects/netbeans.o: netbeans.c
 objects/channel.o: channel.c
 	$(CCC) -o $@ channel.c
 
+objects/wterm.o: wterm.c
+	$(CCC) -o $@ wterm.c
+
 Makefile:
 	@echo The name of the makefile MUST be "Makefile" (with capital M)!!!!
 
@@ -3857,6 +3863,10 @@ objects/netbeans.o: netbeans.c vim.h protodef.h auto/config.h feature.h os_unix.
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h version.h
 objects/channel.o: channel.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
+objects/wterm.o: wterm.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h
