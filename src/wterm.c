@@ -10,4 +10,12 @@
 
 #include "wterm.h"
 
+void wterm_get_size(const wterm_T *wt, int *prow, int *pcol)
+{
+    if (prow != NULL)
+	*prow = wt->wt_rows;
+    if (pcol != NULL)
+	*pcol = wt->wt_cols;
+}
+
 #endif

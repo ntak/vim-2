@@ -62,6 +62,7 @@ typedef struct frame_S		frame_T;
 typedef int			scid_T;		/* script ID */
 typedef struct file_buffer	buf_T;  /* forward declaration */
 typedef struct terminal_S	term_T;
+typedef struct wterm_S		wterm_T;
 
 #ifdef FEAT_MENU
 typedef struct VimMenu vimmenu_T;

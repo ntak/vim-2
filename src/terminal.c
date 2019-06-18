@@ -49,6 +49,7 @@
 # define MAX(x,y) ((x) > (y) ? (x) : (y))
 #endif
 
+#include "wterm.h"
 #include "libvterm/include/vterm.h"
 
 /* This is VTermScreenCell without the characters, thus much smaller. */
@@ -83,6 +84,11 @@ typedef struct _DYN_STARTUPINFOEXW
 } DYN_STARTUPINFOEXW, *PDYN_STARTUPINFOEXW;
 #endif
 
+struct wterm_S {
+    int		wt_rows;
+    int		wt_cols;
+};
+
 /* typedef term_T in structs.h */
 struct terminal_S {
     term_T	*tl_next;
@@ -97,6 +103,8 @@ struct terminal_S {
 
     /* Set when setting the size of a vterm, reset after redrawing. */
     int		tl_vterm_size_changed;
+
+    wterm_T	*tl_wterm;
 
     int		tl_normal_mode; /* TRUE: Terminal-Normal mode */
     int		tl_channel_closed;
@@ -641,6 +649,9 @@ term_start(
 	res = create_pty_only(term, opt);
     else
 	res = term_and_job_init(term, argvar, argv, opt, &orig_opt);
+
+    if (opt->jo_term_type == 'w')
+	using_wterm = TRUE;
 
     newbuf = curbuf;
     if (res == OK)
