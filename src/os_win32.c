@@ -7550,3 +7550,30 @@ resize_console_buf(void)
     }
 }
 #endif
+
+    void
+set_style_overlapped(
+    int show)
+{
+    HANDLE   hwnd;
+    LONG_PTR style;
+
+#if defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
+    if (gui.in_use)
+	hwnd = GetActiveWindow();
+    else
+#endif
+	hwnd = GetConsoleWindow();
+
+    style = GetWindowLongPtr(hwnd, GWL_STYLE);
+
+    if (show)
+	style |= WS_OVERLAPPEDWINDOW;
+    else
+	style &= (~WS_OVERLAPPEDWINDOW);
+
+    SetWindowLongPtr(hwnd, GWL_STYLE, style);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+							   | SWP_FRAMECHANGED);
+}

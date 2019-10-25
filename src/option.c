@@ -3043,6 +3043,21 @@ set_bool_option(
     }
 #endif
 
+    /* grayscale */
+    else if ((int *)varp == &p_gs)
+    {
+	highlight_gui_started();
+	init_highlight(TRUE, FALSE);
+    }
+
+#if defined(MSWIN) || defined(FEAT_GUI) || defined(VIMDLL)
+    else if ((int *)varp == &p_ovl)
+    {
+	set_style_overlapped(p_ovl);
+	set_shellsize((int)Columns, (int)Rows, TRUE);
+    }
+#endif
+
     /*
      * End of handling side effects for bool options.
      */

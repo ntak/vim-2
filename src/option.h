@@ -748,6 +748,9 @@ EXTERN char_u	*p_nf;		// 'nrformats'
 #if defined(MSWIN)
 EXTERN int	p_odev;		// 'opendevice'
 #endif
+#if defined(MSWIN) || defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
+EXTERN int	p_ovl;		// 'overlapped'
+#endif
 EXTERN char_u	*p_opfunc;	// 'operatorfunc'
 EXTERN char_u	*p_para;	// 'paragraphs'
 EXTERN int	p_paste;	// 'paste'

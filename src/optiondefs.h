@@ -1841,6 +1841,9 @@ static struct vimoption options[] =
     {"osfiletype",  "oft",  P_STRING|P_ALLOCED|P_VI_DEF,
 			    (char_u *)NULL, PV_NONE,
 			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},
+    {"overlapped",  "ovl",  P_BOOL|P_VI_DEF,
+			    (char_u *)&p_ovl, PV_NONE,
+			    {(char_u *)TRUE, (char_u *)1L} SCTX_INIT},
     {"packpath",    "pp",   P_STRING|P_VI_DEF|P_EXPAND|P_ONECOMMA|P_NODUP
 								    |P_SECURE,
 			    (char_u *)&p_pp, PV_NONE,

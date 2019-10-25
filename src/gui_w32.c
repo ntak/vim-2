@@ -5395,6 +5395,7 @@ gui_mch_set_shellsize(
     RECT	workarea_rect;
     int		win_width, win_height;
     WINDOWPLACEMENT wndpl;
+    LONG_PTR	style;
 
     /* Try to keep window completely on screen. */
     /* Get position of the screen work area.  This is the part that is not
@@ -5426,6 +5427,16 @@ gui_mch_set_shellsize(
 			+ gui_mswin_get_menu_height(FALSE)
 #endif
 			;
+    style = GetWindowLongPtr(s_hwnd, GWL_STYLE);
+    if ((style & WS_CAPTION) == 0)
+    {
+	win_width = width;
+	win_height = height
+#ifdef FEAT_MENU
+			+ gui_mswin_get_menu_height(FALSE)
+#endif
+			;
+    }
 
     /* The following should take care of keeping Vim on the same monitor, no
      * matter if the secondary monitor is left or right of the primary
