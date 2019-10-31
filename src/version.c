@@ -436,6 +436,7 @@ static char *(features[]) =
 #else
 	"-netbeans_intg",
 #endif
+	"+ntak",
 #ifdef FEAT_NUM64
 	"+num64",
 #else

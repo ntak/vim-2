@@ -3486,6 +3486,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 	"mzscheme",
 #endif
 #endif
+	"ntak",
 #ifdef FEAT_NUM64
 	"num64",
 #endif
