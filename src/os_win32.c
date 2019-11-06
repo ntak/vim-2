@@ -219,6 +219,9 @@ static void set_console_color_rgb(void);
 static void reset_console_color_rgb(void);
 #endif
 
+static int g_transparency_saved = FALSE;
+static int g_transparency;
+
 /* This flag is newly created from Windows 10 */
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 # define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
@@ -2562,6 +2565,8 @@ mch_init_c(void)
 #ifndef __MINGW32__
     extern int _fmode;
 #endif
+    BYTE alpha;
+    DWORD flags;
 
     /* Silently handle invalid parameters to CRT functions */
     SET_INVALID_PARAM_HANDLER;
@@ -2641,6 +2646,13 @@ mch_init_c(void)
 
     vtp_flag_init();
     vtp_init();
+
+    GetLayeredWindowAttributes(GetConsoleWindow(), NULL, &alpha, &flags);
+    if ((flags & LWA_ALPHA) != 0)
+	g_transparency = alpha;
+    else
+	g_transparency = 255;
+    g_transparency_saved = TRUE;
 }
 
 /*
@@ -2652,6 +2664,8 @@ mch_init_c(void)
 mch_exit_c(int r)
 {
     exiting = TRUE;
+
+    restore_transparency(GetConsoleWindow());
 
     vtp_exit();
 
@@ -7442,6 +7456,15 @@ set_console_color_rgb(void)
 	bg = ctermbg != -1 ? ctermtoxterm(ctermbg) : default_console_color_bg;
 	cterm_normal_bg_gui_color = bg;
     }
+
+#ifdef FEAT_TERMINAL
+    if (bt_terminal(curwin->w_buffer))
+	return;
+#endif
+
+    fg = maybe_colormanip(fg);
+    bg = maybe_colormanip(bg);
+
     fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
     bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
 
@@ -7576,4 +7599,21 @@ set_style_overlapped(
     SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
 			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
 							   | SWP_FRAMECHANGED);
+}
+    void
+mch_set_transparency(
+    long alpha)
+{
+    if (alpha < 0 || 255 < alpha)
+	alpha = 255;
+
+    SetLayeredWindowAttributes(GetConsoleWindow(), 0, alpha, LWA_ALPHA);
+}
+
+    void
+restore_transparency(
+    HWND hwnd)
+{
+    if (g_transparency_saved)
+	SetLayeredWindowAttributes(hwnd, 0, g_transparency, LWA_ALPHA);
 }

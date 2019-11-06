@@ -816,6 +816,7 @@ Short explanation of each option:		*option-list*
 'mzquantum'	  'mzq'     the interval between polls for MzScheme threads
 'mzschemedll'		    name of the MzScheme dynamic library
 'mzschemegcdll'		    name of the MzScheme dynamic library for GC
+'nightshift'	  'ns'	    set the entire color to night mode
 'nrformats'	  'nf'	    number formats recognized for CTRL-A command
 'number'	  'nu'	    print the line number in front of each line
 'numberwidth'	  'nuw'     number of columns used for the line number

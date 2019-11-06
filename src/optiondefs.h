@@ -808,6 +808,9 @@ static struct vimoption options[] =
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)"both", (char_u *)0L} SCTX_INIT},
+    {"darkness",    "dness", P_NUM|P_VI_DEF,
+			    (char_u *)&p_dness, PV_NONE,
+			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},
     {"debug",	    NULL,   P_STRING|P_VI_DEF,
 			    (char_u *)&p_debug, PV_NONE,
 			    {(char_u *)"", (char_u *)0L} SCTX_INIT},
@@ -1115,11 +1118,17 @@ static struct vimoption options[] =
 			    {(char_u *)FALSE, (char_u *)0L}
 #endif
 			    SCTX_INIT},
+    {"gamma",	    "ga",   P_NUM|P_VI_DEF,
+			    (char_u *)&p_ga, PV_NONE,
+			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},
     {"gdefault",    "gd",   P_BOOL|P_VI_DEF|P_VIM,
 			    (char_u *)&p_gd, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"graphic",	    "gr",   P_BOOL|P_VI_DEF,
 			    (char_u *)NULL, PV_NONE,
+			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
+    {"grayscale",   "gs",   P_BOOL|P_VI_DEF,
+			    (char_u *)&p_gs, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"grepformat",  "gfm",  P_STRING|P_VI_DEF|P_ONECOMMA|P_NODUP,
 #ifdef FEAT_QUICKFIX
@@ -1604,6 +1613,9 @@ static struct vimoption options[] =
     {"listchars",   "lcs",  P_STRING|P_VI_DEF|P_RALL|P_ONECOMMA|P_NODUP,
 			    (char_u *)&p_lcs, PV_NONE,
 			    {(char_u *)"eol:$", (char_u *)0L} SCTX_INIT},
+    {"lightness",   "lness", P_NUM|P_VI_DEF,
+			    (char_u *)&p_lness, PV_NONE,
+			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},
     {"loadplugins", "lpl",  P_BOOL|P_VI_DEF,
 			    (char_u *)&p_lpl, PV_NONE,
 			    {(char_u *)TRUE, (char_u *)0L} SCTX_INIT},
@@ -1795,6 +1807,9 @@ static struct vimoption options[] =
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)100L, (char_u *)100L} SCTX_INIT},
+    {"nightshift",  "ns",   P_NUM|P_VI_DEF,
+			    (char_u *)&p_ns, PV_NONE,
+			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},
     {"novice",	    NULL,   P_BOOL|P_VI_DEF,
 			    (char_u *)NULL, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
@@ -2656,6 +2671,9 @@ static struct vimoption options[] =
 			    {(char_u *)0L, (char_u *)0L}
 #endif
 			    SCTX_INIT},
+    {"transparency", "tra", P_NUM|P_VI_DEF,
+			    (char_u *)&p_tra, PV_NONE,
+			    {(char_u *)255L, (char_u *)0L} SCTX_INIT},
     {"ttimeout",    NULL,   P_BOOL|P_VI_DEF|P_VIM,
 			    (char_u *)&p_ttimeout, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},

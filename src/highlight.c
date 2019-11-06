@@ -1985,7 +1985,7 @@ hl_do_font(
  * Returns INVALCOLOR when failed.
  */
     guicolor_T
-color_name2handle(char_u *name)
+color_name2handle_pure(char_u *name)
 {
     if (STRCMP(name, "NONE") == 0)
 	return INVALCOLOR;
@@ -2022,6 +2022,19 @@ color_name2handle(char_u *name)
     }
 
     return GUI_GET_COLOR(name);
+}
+
+    guicolor_T
+color_name2handle(char_u *name)
+{
+    guicolor_T result;
+
+    result = color_name2handle_pure(name);
+# ifdef FEAT_GUI
+    if (gui.in_use)
+	result = maybe_colormanip(result);
+# endif
+    return result;
 }
 #endif
 
@@ -3120,6 +3133,93 @@ syn_id2attr(int hl_id)
 }
 
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS) || defined(PROTO)
+# ifndef min_
+#  define min_(a, b) ((a) < (b) ? (a) : (b))
+# endif
+# ifndef max_
+#  define max_(a, b) ((a) > (b) ? (a) : (b))
+# endif
+/*
+ * Add color temperature.
+ */
+    guicolor_T
+maybe_colormanip(guicolor_T sgp)
+{
+    long k = p_ns;
+    long ln = p_lness, dn = p_dness;
+    long r, g, b, lr, lg, lb;
+#ifdef FEAT_GUI_MSWIN
+    long t;
+#endif
+
+    if ((p_ns || p_lness || p_dness || p_ga || p_gs) && sgp != INVALCOLOR)
+    {
+#ifdef FEAT_GUI_MSWIN
+	r = GetRValue(sgp);
+	g = GetGValue(sgp);
+	b = GetBValue(sgp);
+	if (!gui.in_use)
+	{
+	    t = r;
+	    r = b;
+	    b = t;
+	}
+#else
+	r = (sgp >> 16) & 255;
+	g = (sgp >> 8) & 255;
+	b = sgp & 255;
+#endif
+
+	if (k != 0)
+	{
+	    k = min_(max_(k, 1000), 40000) / 100;
+
+	    lr = (k <= 66) ? 255 : min_(max_(329.69 * pow(k - 60, -0.13), 0),
+									  255);
+	    lg = (k <= 66) ? min_(max_(99.47 * log(k) - 161.11, 0), 255)
+			     : min_(max_(288.12 * pow(k - 60, -0.07), 0), 255);
+	    lb = (k >= 66) ? 255 : (k <= 19) ? 0
+			   : min_(max_(138.51 * log(k - 10) - 305.04, 0), 255);
+
+	    r = ((r * lr) / 256) & 255;
+	    g = ((g * lg) / 256) & 255;
+	    b = ((b * lb) / 256) & 255;
+	}
+
+	// lightness
+	if (ln != 0)
+	r = ln != 0 ? r + (255 - r) * ln / 100 : r;
+	g = ln != 0 ? g + (255 - g) * ln / 100 : g;
+	b = ln != 0 ? b + (255 - b) * ln / 100 : b;
+
+	// darkness
+	if (dn != 0)
+	r = dn != 0 ? r - r * dn / 100 : r;
+	g = dn != 0 ? g - g * dn / 100 : g;
+	b = dn != 0 ? b - b * dn / 100 : b;
+
+	if (p_ga != 0)
+	{
+	    r = pow(r / 255.0, p_ga / 10.0) * 255;
+	    g = pow(g / 255.0, p_ga / 10.0) * 255;
+	    b = pow(b / 255.0, p_ga / 10.0) * 255;
+	}
+
+	if (p_gs)
+	    r = g = b = (2 * r + 4 * g + b) / 7;    // NTSC approximation
+
+	sgp = ((r << 16) | (g << 8) | b);
+#ifdef FEAT_GUI_MSWIN
+	if (!gui.in_use)
+	    sgp = (GetBValue(sgp) << 16) | (GetGValue(sgp) << 8) | GetRValue(sgp);
+	else
+	    sgp = (GetRValue(sgp) << 16) | (GetGValue(sgp) << 8) | GetBValue(sgp);
+#endif
+    }
+
+    return sgp;
+}
+
 /*
  * Get the GUI colors and attributes for a group ID.
  * NOTE: the colors will be INVALCOLOR when not set, the color otherwise.

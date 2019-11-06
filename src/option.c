@@ -3517,6 +3517,40 @@ set_num_option(
 #endif
     }
 
+    /* 'nightshift', 'lightness', 'darkness', 'gamma' */
+    else if (pp == &p_ns || pp == &p_lness || pp == &p_dness || pp == &p_ga)
+    {
+	if (value < 0)
+	    value = 0;
+	if (255 < value)
+	    value = 255;
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS) || defined(VIMDLL)
+	highlight_gui_started();
+#endif
+	init_highlight(TRUE, FALSE);
+#if defined(MSWIN) && !defined(FEAT_GUI) && defined(FEAT_TERMGUICOLORS) \
+	|| defined(VIMDLL)
+	control_console_color_rgb();
+#endif
+    }
+
+    /* transparency */
+    else if (pp == &p_tra)
+    {
+	if (value < 0)
+	    value = 0;
+	if (255 < value)
+	    value = 255;
+#if defined(MSWIN) || defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
+# if defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
+	if (gui.in_use)
+	    gui_mch_set_transparency(value);
+	else
+# endif
+	    mch_set_transparency(value);
+#endif
+    }
+
     /*
      * Check the bounds for numeric options here
      */

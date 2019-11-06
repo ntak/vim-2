@@ -5161,7 +5161,7 @@ gui_mch_init(void)
 	    // TODO: last argument should point to a CLIENTCREATESTRUCT
 	    // structure.
 	    s_hwnd = CreateWindowExW(
-		WS_EX_MDICHILD,
+		WS_EX_MDICHILD | WS_EX_LAYERED,
 		szVimWndClassW, L"Vim MSWindows GUI",
 		WS_OVERLAPPEDWINDOW | WS_CHILD
 				 | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | 0xC000,
@@ -8691,3 +8691,20 @@ netbeans_draw_multisign_indicator(int row)
     SetPixel(s_hdc, x+2, y, gui.currFgColor);
 }
 #endif
+
+    void
+gui_mch_set_transparency(
+    long alpha)
+{
+    LONG_PTR exstyle;
+
+    if (alpha < 0 || 255 < alpha)
+	alpha = 255;
+
+    exstyle = GetWindowLongPtr(s_hwnd, GWL_EXSTYLE) | WS_EX_LAYERED;
+    SetWindowLongPtr(s_hwnd, GWL_EXSTYLE, exstyle);
+    SetWindowPos(s_hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE
+			   | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+    SetLayeredWindowAttributes(s_hwnd, 0, alpha, LWA_ALPHA);
+}

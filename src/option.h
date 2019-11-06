@@ -494,6 +494,7 @@ EXTERN long	p_csto;		// 'cscopetagorder'
 EXTERN long	p_cspc;		// 'cscopepathcomp'
 EXTERN int	p_csverbose;	// 'cscopeverbose'
 #endif
+EXTERN long	p_dness;	// 'darkness'
 EXTERN char_u	*p_debug;	// 'debug'
 #ifdef FEAT_FIND_ID
 EXTERN char_u	*p_def;		// 'define'
@@ -566,7 +567,9 @@ EXTERN char_u	*p_fp;		// 'formatprg'
 #ifdef HAVE_FSYNC
 EXTERN int	p_fs;		// 'fsync'
 #endif
+EXTERN long	p_ga;		// 'gamma'
 EXTERN int	p_gd;		// 'gdefault'
+EXTERN int	p_gs;		// 'grayscale'
 #ifdef FEAT_TEXT_PROP
 # ifdef FEAT_QUICKFIX
 EXTERN char_u	*p_cpp;		// 'completepopup'
@@ -688,6 +691,7 @@ EXTERN long	p_stal;		// 'showtabline'
 EXTERN char_u	*p_lcs;		// 'listchars'
 
 EXTERN int	p_lz;		// 'lazyredraw'
+EXTERN long	p_lness;	// 'lightness'
 EXTERN int	p_lpl;		// 'loadplugins'
 #if defined(DYNAMIC_LUA)
 EXTERN char_u	*p_luadll;	// 'luadll'
@@ -744,6 +748,7 @@ EXTERN char_u	*p_mzschemedll;	// 'mzschemedll'
 EXTERN char_u	*p_mzschemegcdll; // 'mzschemegcdll'
 # endif
 #endif
+EXTERN long	p_ns;		// 'nightshift'
 EXTERN char_u	*p_nf;		// 'nrformats'
 #if defined(MSWIN)
 EXTERN int	p_odev;		// 'opendevice'
@@ -987,6 +992,7 @@ EXTERN unsigned tbis_flags;
 # define TBIS_HUGE		0x10
 # define TBIS_GIANT		0x20
 #endif
+EXTERN long	p_tra;		// 'transparency'
 EXTERN long	p_ttyscroll;	// 'ttyscroll'
 #if defined(UNIX) || defined(VMS)
 EXTERN char_u	*p_ttym;	// 'ttymouse'

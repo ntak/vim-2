@@ -80,4 +80,6 @@ int get_conpty_type(void);
 int is_conpty_stable(void);
 void resize_console_buf(void);
 void set_style_overlapped(int show);
+void mch_set_transparency(long alpha);
+void restore_transparency(HWND hwnd);
 /* vim: set ft=c : */
