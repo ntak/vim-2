@@ -7412,13 +7412,24 @@ vtp_sgr_bulks(
 }
 
 # ifdef FEAT_TERMGUICOLORS
-    static int
+    int
 ctermtoxterm(
     int cterm)
 {
     char_u r, g, b, idx;
 
-    cterm_color2rgb(cterm, &r, &g, &b, &idx);
+    if (USE_VTP && has_csbiex && cterm < 16)
+    {
+	DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+
+	csbi.cbSize = sizeof(csbi);
+	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	r = ((unsigned)csbi.ColorTable[cterm] >> 16) & 255;
+	g = ((unsigned)csbi.ColorTable[cterm] >> 8) & 255;
+	b = ((unsigned)csbi.ColorTable[cterm]) & 255;
+    }
+    else
+	cterm_color2rgb(cterm, &r, &g, &b, &idx);
     return (((int)r << 16) | ((int)g << 8) | (int)b);
 }
 # endif

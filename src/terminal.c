@@ -176,6 +176,8 @@ static term_T *in_terminal_loop = NULL;
 #ifdef MSWIN
 static BOOL has_winpty = FALSE;
 static BOOL has_conpty = FALSE;
+
+static VTermState *step_vterm_obtain_state(VTerm *vt);
 #endif
 
 #define MAX_ROW 999999	    /* used for tl_dirty_row_end to update all rows */
@@ -1176,7 +1178,7 @@ term_mouse_click(VTerm *vterm, int key)
     static int	    ignore_drag_release = TRUE;
     VTermMouseState mouse_state;
 
-    vterm_state_get_mousestate(vterm_obtain_state(vterm), &mouse_state);
+    vterm_state_get_mousestate(step_vterm_obtain_state(vterm), &mouse_state);
     if (mouse_state.flags == 0)
     {
 	/* Terminal is not using the mouse, use modeless selection. */
@@ -1800,7 +1802,7 @@ may_move_terminal_to_buffer(term_T *term, int redraw)
 	update_snapshot(term);
 
     /* Obtain the current background color. */
-    vterm_state_get_default_colors(vterm_obtain_state(term->tl_vterm),
+    vterm_state_get_default_colors(step_vterm_obtain_state(term->tl_vterm),
 		       &term->tl_default_color.fg, &term->tl_default_color.bg);
 
     if (redraw)
@@ -2746,7 +2748,7 @@ term_scroll_up(term_T *term, int start_row, int count)
     int			 clear_attr;
 
     /* Set the color to clear lines with. */
-    vterm_state_get_default_colors(vterm_obtain_state(term->tl_vterm),
+    vterm_state_get_default_colors(step_vterm_obtain_state(term->tl_vterm),
 								     &fg, &bg);
     vim_memset(&attr, 0, sizeof(attr));
     clear_attr = cell2attr(attr, fg, bg);
@@ -3431,7 +3433,7 @@ term_update_window(win_T *wp)
 
     vterm = term->tl_vterm;
     screen = vterm_obtain_screen(vterm);
-    state = vterm_obtain_state(vterm);
+    state = step_vterm_obtain_state(vterm);
 
     /* We use NOT_VALID on a resize or scroll, redraw everything then.  With
      * SOME_VALID only redraw what was marked dirty. */
@@ -3584,6 +3586,23 @@ term_get_attr(buf_T *buf, linenr_T lnum, int col)
     static void
 cterm_color2vterm(int nr, VTermColor *rgb)
 {
+#if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(FEAT_TERMGUICOLORS) || defined(VIMDLL))
+    if (
+# ifdef VIMDLL
+	!gui.in_use &&
+# endif
+	nr < 16)
+    {
+	int cx;
+
+	cx = ctermtoxterm(nr);
+	rgb->red = (unsigned)(cx >> 16) & 255;
+	rgb->green = (unsigned)(cx >> 8) & 255;
+	rgb->blue = (unsigned)(cx) & 255;
+	rgb->ansi_index = nr + 1;
+    }
+    else
+#endif
     cterm_color2rgb(nr, &rgb->red, &rgb->green, &rgb->blue, &rgb->ansi_index);
 }
 
@@ -3666,7 +3685,7 @@ init_default_colors(term_T *term)
 	{
 	    long_u rgb = GUI_MCH_GET_RGB(fg_rgb);
 
-	    fg->red = (unsigned)(rgb >> 16);
+	    fg->red = (unsigned)(rgb >> 16) & 255;
 	    fg->green = (unsigned)(rgb >> 8) & 255;
 	    fg->blue = (unsigned)rgb & 255;
 	}
@@ -3674,7 +3693,7 @@ init_default_colors(term_T *term)
 	{
 	    long_u rgb = GUI_MCH_GET_RGB(bg_rgb);
 
-	    bg->red = (unsigned)(rgb >> 16);
+	    bg->red = (unsigned)(rgb >> 16) & 255;
 	    bg->green = (unsigned)(rgb >> 8) & 255;
 	    bg->blue = (unsigned)rgb & 255;
 	}
@@ -3743,13 +3762,13 @@ init_default_colors(term_T *term)
 set_vterm_palette(VTerm *vterm, long_u *rgb)
 {
     int		index = 0;
-    VTermState	*state = vterm_obtain_state(vterm);
+    VTermState	*state = step_vterm_obtain_state(vterm);
 
     for (; index < 16; index++)
     {
 	VTermColor	color;
 
-	color.red = (unsigned)(rgb[index] >> 16);
+	color.red = (unsigned)(rgb[index] >> 16) & 255;
 	color.green = (unsigned)(rgb[index] >> 8) & 255;
 	color.blue = (unsigned)rgb[index] & 255;
 	vterm_state_set_palette_color(state, index, &color);
@@ -4103,7 +4122,7 @@ create_vterm(term_T *term, int rows, int cols)
 	return FAIL;
 
     // Allocate screen and state here, so we can bail out if that fails.
-    state = vterm_obtain_state(vterm);
+    state = step_vterm_obtain_state(vterm);
     screen = vterm_obtain_screen(vterm);
     if (state == NULL || screen == NULL)
     {
@@ -4125,7 +4144,7 @@ create_vterm(term_T *term, int rows, int cols)
     if (t_colors < 16)
 	// Less than 16 colors: assume that bold means using a bright color for
 	// the foreground color.
-	vterm_state_set_bold_highbright(vterm_obtain_state(vterm), 1);
+	vterm_state_set_bold_highbright(step_vterm_obtain_state(vterm), 1);
 
     /* Required to initialize most things. */
     vterm_screen_reset(screen, 1 /* hard */);
@@ -4338,7 +4357,7 @@ f_term_dumpwrite(typval_T *argvars, typval_T *rettv UNUSED)
     vim_memset(&prev_cell, 0, sizeof(prev_cell));
 
     screen = vterm_obtain_screen(term->tl_vterm);
-    state = vterm_obtain_state(term->tl_vterm);
+    state = step_vterm_obtain_state(term->tl_vterm);
     vterm_state_get_cursorpos(state, &cursor_pos);
 
     for (pos.row = 0; (max_height == 0 || pos.row < max_height)
@@ -5637,7 +5656,7 @@ f_term_getansicolors(typval_T *argvars, typval_T *rettv)
 	return;
 
     list = rettv->vval.v_list;
-    state = vterm_obtain_state(term->tl_vterm);
+    state = step_vterm_obtain_state(term->tl_vterm);
     for (index = 0; index < 16; index++)
     {
 	vterm_state_get_palette_color(state, index, &color);
@@ -6195,6 +6214,31 @@ term_free_conpty(term_T *term)
 use_conpty(void)
 {
     return has_conpty;
+}
+
+static VTermState *step_vterm_obtain_state(VTerm *vt)
+{
+#if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(FEAT_TERMGUICOLORS) || defined(VIMDLL))
+    VTermState *state;
+    VTermColor c;
+    int cx, i;
+
+# ifdef VIMDLL
+    if (!gui.in_use)
+# endif
+    {
+	state = vterm_obtain_state(vt);
+	for (i = 0; i < 16; ++i)
+	{
+	    cx = ctermtoxterm(i);
+	    c.red = (unsigned)(cx >> 16) & 255;
+	    c.green = (unsigned)(cx >> 8) & 255;
+	    c.blue = (unsigned)(cx) & 255;
+	    vterm_state_set_palette_color(state, i, &c);
+	}
+    }
+#endif
+    return vterm_obtain_state(vt);
 }
 
 #  ifndef PROTO
