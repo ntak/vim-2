@@ -256,6 +256,74 @@ static PfnSetConsoleScreenBufferInfoEx pSetConsoleScreenBufferInfoEx;
 static BOOL has_csbiex = FALSE;
 #endif
 
+    HWND
+get_window_handle(void)
+{
+#if defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
+    if (gui.in_use)
+	return GetActiveWindow();
+    else
+#endif
+	return GetConsoleWindow();
+}
+
+    void
+begin_window_style(void)
+{
+    ShowWindow(get_window_handle(), SW_HIDE);
+}
+
+    void
+end_window_style(void)
+{
+    ShowWindow(get_window_handle(), SW_SHOW);
+    SetWindowPos(get_window_handle(), NULL, 0, 0, 0, 0,
+		    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+}
+
+    void
+modify_window_style(
+    LONG_PTR newlong,
+    int index,
+    BOOL set)
+{
+    HWND hwnd;
+    LONG_PTR curstyle;
+
+    hwnd = get_window_handle();
+
+    ShowWindow(hwnd, SW_HIDE);
+    curstyle= GetWindowLongPtr(hwnd, index);
+
+    if (set)
+	curstyle |= newlong;
+    else
+	curstyle &= ~(newlong);
+
+    SetWindowLongPtr(hwnd, index, curstyle);
+    ShowWindow(hwnd, SW_SHOW);
+}
+
+    void
+show_in_taskbar(
+    BOOL visible)
+{
+    begin_window_style();
+    if (!visible)
+    {
+	modify_window_style(WS_VISIBLE, GWL_STYLE, FALSE);
+	modify_window_style(WS_EX_TOOLWINDOW, GWL_EXSTYLE, TRUE);
+	modify_window_style(WS_EX_APPWINDOW, GWL_EXSTYLE, FALSE);
+    }
+    else
+    {
+	modify_window_style(WS_VISIBLE, GWL_STYLE, TRUE);
+	modify_window_style(WS_EX_TOOLWINDOW, GWL_EXSTYLE, FALSE);
+	modify_window_style(WS_EX_APPWINDOW, GWL_EXSTYLE, TRUE);
+    }
+    end_window_style();
+}
+
 /*
  * Get version number including build number
  */
@@ -2653,6 +2721,8 @@ mch_init_c(void)
     else
 	g_transparency = 255;
     g_transparency_saved = TRUE;
+
+    show_in_taskbar(FALSE);
 }
 
 /*
@@ -2665,6 +2735,7 @@ mch_exit_c(int r)
 {
     exiting = TRUE;
 
+    show_in_taskbar(TRUE);
     restore_transparency(GetConsoleWindow());
 
     vtp_exit();
