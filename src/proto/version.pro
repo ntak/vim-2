@@ -6,6 +6,6 @@ void ex_version(exarg_T *eap);
 void list_in_columns(char_u **items, int size, int current);
 void list_version(void);
 void maybe_intro_message(void);
-void intro_message(int colon);
+void intro_message(int colon, int bufempty);
 void ex_intro(exarg_T *eap);
 /* vim: set ft=c : */

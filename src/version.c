@@ -6013,7 +6013,7 @@ maybe_intro_message(void)
 	    && curbuf->b_fname == NULL
 	    && firstwin->w_next == NULL
 	    && vim_strchr(p_shm, SHM_INTRO) == NULL)
-	intro_message(FALSE);
+	intro_message(FALSE, TRUE);
 }
 
 /*
@@ -6023,7 +6023,8 @@ maybe_intro_message(void)
  */
     void
 intro_message(
-    int		colon)		/* TRUE for ":intro" */
+    int		colon,	    /* TRUE for ":intro" */
+    int		bufempty)   /* TRUE when the background collapses */
 {
     int		i;
     int		row;
@@ -6078,6 +6079,18 @@ intro_message(
 	N_("                              for Vim defaults   "),
     };
 #endif
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+    int srcid, normid, spekid;
+    guicolor_T srcfg = INVALCOLOR, srcbg = INVALCOLOR;
+    guicolor_T normfg = INVALCOLOR, normbg = INVALCOLOR;
+    guicolor_T spekfg = INVALCOLOR, spekbg = INVALCOLOR;
+#endif
+#if defined(FEAT_GUI)
+    guicolor_T save_back_pixel;
+#endif
+#if defined(FEAT_TERMGUICOLORS)
+    long save_bg_gui_color;
+#endif
 
     /* blanklines = screen height - # message lines */
     blanklines = (int)Rows - ((sizeof(lines) / sizeof(char *)) - 1);
@@ -6089,6 +6102,51 @@ intro_message(
 	blanklines -= Rows - topframe->fr_height;
     if (blanklines < 0)
 	blanklines = 0;
+
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+    if (bufempty)
+    {
+	// The left and right background of the string
+	srcid = syn_name2id((char_u *)"EndOfBuffer");
+
+	// Replace the background of this string
+	normid = syn_name2id((char_u *)"Normal");
+	spekid = syn_name2id((char_u *)"SpecialKey");
+
+	if (srcid > 0)
+	    syn_id2colors(srcid, &srcfg, &srcbg);
+	if (normid > 0 && srcid > 0)
+	{
+	    syn_id2colors(normid, &normfg, &normbg);
+	    syn_colors2id(normid, normfg, srcbg);
+	}
+	if (spekid > 0 && srcid > 0)
+	{
+	    syn_id2colors(spekid, &spekfg, &spekbg);
+	    syn_colors2id(spekid, spekfg, srcbg);
+	}
+
+# if defined(FEAT_GUI)
+	save_back_pixel = gui.back_pixel;
+# endif
+# if defined(FEAT_TERMGUICOLORS)
+	save_bg_gui_color = cterm_normal_bg_gui_color;
+# endif
+
+	if (srcid > 0)
+	{
+# if defined(FEAT_GUI)
+	    gui.back_pixel = srcbg;
+	    gui.def_back_pixel = srcbg;
+# endif
+# if defined(FEAT_TERMGUICOLORS)
+	    cterm_normal_bg_gui_color = srcbg;
+# endif
+	}
+
+	highlight_changed();
+    }
+#endif
 
     /* Show the sponsor and register message one out of four times, the Uganda
      * message two out of four times. */
@@ -6134,6 +6192,25 @@ intro_message(
     /* Make the wait-return message appear just below the text. */
     if (colon)
 	msg_row = row;
+
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+    if (bufempty)
+    {
+	// Return when output is complete
+	syn_colors2id(normid, normfg, normbg);
+	syn_colors2id(spekid, spekfg, spekbg);
+
+# if defined(FEAT_TERMGUICOLORS)
+	cterm_normal_bg_gui_color = save_bg_gui_color;
+# endif
+# if defined(FEAT_GUI)
+	gui.back_pixel = save_back_pixel;
+	gui.def_back_pixel = save_back_pixel;
+# endif
+
+	highlight_changed();
+    }
+#endif
 }
 
     static void
@@ -6215,6 +6292,6 @@ do_intro_line(
 ex_intro(exarg_T *eap UNUSED)
 {
     screenclear();
-    intro_message(TRUE);
+    intro_message(TRUE, FALSE);
     wait_return(TRUE);
 }
