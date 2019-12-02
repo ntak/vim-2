@@ -5979,7 +5979,7 @@ maybe_intro_message(void)
 	    && curbuf->b_fname == NULL
 	    && firstwin->w_next == NULL
 	    && vim_strchr(p_shm, SHM_INTRO) == NULL)
-	intro_message(FALSE);
+	intro_message(FALSE, TRUE);
 }
 
 /*
@@ -5989,7 +5989,8 @@ maybe_intro_message(void)
  */
     void
 intro_message(
-    int		colon)		/* TRUE for ":intro" */
+    int		colon,	    /* TRUE for ":intro" */
+    int		bufempty)   /* TRUE when the background collapses */
 {
     int		i;
     int		row;
@@ -6044,6 +6045,14 @@ intro_message(
 	N_("                              for Vim defaults   "),
     };
 #endif
+#ifdef FEAT_TERMGUICOLORS
+    int srcid, normid, spekid;
+
+    long save_bg_gui_color;
+    guicolor_T srcfg = INVALCOLOR, srcbg = INVALCOLOR;
+    guicolor_T normfg = INVALCOLOR, normbg = INVALCOLOR;
+    guicolor_T spekfg = INVALCOLOR, spekbg = INVALCOLOR;
+#endif
 
     /* blanklines = screen height - # message lines */
     blanklines = (int)Rows - ((sizeof(lines) / sizeof(char *)) - 1);
@@ -6055,6 +6064,30 @@ intro_message(
 	blanklines -= Rows - topframe->fr_height;
     if (blanklines < 0)
 	blanklines = 0;
+
+#ifdef FEAT_TERMGUICOLORS
+    if (bufempty)
+    {
+	// The left and right background of the string
+	srcid = syn_name2id((char_u *)"EndOfBuffer");
+
+	// Replace the background of this string
+	normid = syn_name2id((char_u *)"Normal");
+	spekid = syn_name2id((char_u *)"SpecialKey");
+
+	save_bg_gui_color = cterm_normal_bg_gui_color;
+	if (srcid > 0)
+	    syn_id2colors(srcid, &srcfg, &srcbg);
+	if (normid > 0)
+	    syn_id2colors(normid, &normfg, &normbg);
+	cterm_normal_bg_gui_color = srcbg;
+	if (spekid > 0)
+	    syn_id2colors(spekid, &spekfg, &spekbg);
+	syn_colors2id(spekid, spekfg, srcbg);
+
+	highlight_changed();
+    }
+#endif
 
     /* Show the sponsor and register message one out of four times, the Uganda
      * message two out of four times. */
@@ -6100,6 +6133,23 @@ intro_message(
     /* Make the wait-return message appear just below the text. */
     if (colon)
 	msg_row = row;
+
+#ifdef FEAT_TERMGUICOLORS
+    if (bufempty)
+    {
+	// Return when output is complete
+	cterm_normal_bg_gui_color = normbg;
+	syn_colors2id(spekid, spekfg, spekbg);
+
+	highlight_changed();
+
+# ifdef FEAT_GUI
+	if (!gui.in_use && !gui.starting)
+# endif
+	    highlight_gui_started();
+	init_highlight(TRUE, FALSE);
+    }
+#endif
 }
 
     static void
@@ -6181,6 +6231,6 @@ do_intro_line(
 ex_intro(exarg_T *eap UNUSED)
 {
     screenclear();
-    intro_message(TRUE);
+    intro_message(TRUE, FALSE);
     wait_return(TRUE);
 }

@@ -3136,6 +3136,22 @@ syn_id2colors(int hl_id, guicolor_T *fgp, guicolor_T *bgp)
     *bgp = sgp->sg_gui_bg;
     return sgp->sg_gui;
 }
+
+    void
+syn_colors2id(int hl_id, guicolor_T fg, guicolor_T bg)
+{
+    hl_group_T *sgp;
+    int hl_final;
+
+    hl_final = syn_get_final_id(hl_id);
+    sgp = &HL_TABLE()[hl_final - 1];	    // index is ID minus one
+
+    sgp->sg_gui_fg = fg;
+    sgp->sg_gui_bg = bg;
+
+    set_hl_attr(hl_id - 1);
+}
+
 #endif
 
 #if (defined(MSWIN) \
