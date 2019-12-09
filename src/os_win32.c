@@ -380,26 +380,21 @@ read_console_input(
 
     if (in_query > 0)
     {
-	/* Immediately after sending the query, discard the keyboard event. */
+	// Immediately after sending the query, discard the keyboard event.
 	INPUT_RECORD irStash[IRSIZE];
 	int stashindex = 0;
 	char_u dst[IRSIZE + 1];
 	int dstindex = 0;
 
 	for (i = s_dwIndex; i < (int)(s_dwMax - s_dwIndex); i++)
-	{
 	    if (s_irCache[i].EventType == KEY_EVENT)
 	    {
 		if (s_irCache[i].Event.KeyEvent.bKeyDown)
-		{
 		    dst[dstindex++] = s_irCache[i].Event.KeyEvent.AChar;
-		}
 	    }
 	    else
-	    {
 		irStash[stashindex++] = s_irCache[i];
-	    }
-	}
+
 	dst[dstindex] = NUL;
 	*lpParam = (LPVOID)vim_strsave(dst);
 
@@ -2720,9 +2715,12 @@ mch_init_c(void)
     win_clip_init();
 # endif
 
+#if 0
     vtp_flag_init();
     vtp_init();
     vtp_check_cmdexe();
+#endif
+
 }
 
 /*
