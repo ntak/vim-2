@@ -226,7 +226,7 @@ static void reset_console_color_rgb(void);
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
 static int suppress_winsize = 1;	// don't fiddle with console
-static int dynamic_window_resize = TRUE;    // Suppress cmd.exe compatible apps
+static int dynamic_con_resize = FALSE;	// Suppress cmd.exe compatible apps
 #endif
 
 static char_u *exe_path = NULL;
@@ -1644,32 +1644,18 @@ WaitForChar(long msec, int ignore_input)
 
 		// Only call shell_resized() when the size actually change to
 		// avoid the screen is cleared.
-		if ((dwSize.X != Columns || dwSize.Y != Rows)
-						      && dynamic_window_resize)
+		if (dwSize.X != Columns || dwSize.Y != Rows)
 		{
 		    CONSOLE_SCREEN_BUFFER_INFO csbi;
 		    GetConsoleScreenBufferInfo(g_hConOut, &csbi);
 		    dwSize.X = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 		    dwSize.Y = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 		    
-		    // Support for compatible applications that do not return
-		    // srWindow correctly.  Ignore values that are too large.
-		    if (dwSize.X > csbi.dwMaximumWindowSize.X
-				      || dwSize.Y > csbi.dwMaximumWindowSize.Y)
-			dynamic_window_resize = FALSE;
-		    else
-		    {
-			ResizeConBuf(g_hConOut, dwSize);
+		    // Check for terminals whose window size does not change.
+		    if (dynamic_con_resize)
+			dynamic_con_resize = ResizeConBuf(g_hConOut, dwSize);
+		    if (dynamic_con_resize)
 			shell_resized();
-		    }
-#if 1
-		    FILE *fp = fopen("log", "a+");
-		    fprintf(fp, "size(%d, %d) max(%d, %d)\n",
-			    dwSize.X, dwSize.Y,
-			    csbi.dwMaximumWindowSize.X,
-			    csbi.dwMaximumWindowSize.Y);
-		    fclose(fp);
-#endif
 		}
 	    }
 	    else if (ir.EventType == MOUSE_EVENT
@@ -3670,6 +3656,7 @@ ResizeConBuf(
 {
     if (!SetConsoleScreenBufferSize(hConsole, coordScreen))
     {
+	dynamic_con_resize = FALSE;
 # ifdef MCH_WRITE_DUMP
 	if (fdDump)
 	{
@@ -3753,7 +3740,9 @@ ResizeConBufAndWindow(
 		coordScreen.X = xSize;
 	    else
 		coordScreen.X = sx;
-	    SetConsoleScreenBufferSize(hConsole, coordScreen);
+	    if (dynamic_con_resize)
+		dynamic_con_resize = SetConsoleScreenBufferSize(hConsole,
+								  coordScreen);
 	}
     }
 
