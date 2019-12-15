@@ -7390,7 +7390,7 @@ vtp_sgr_bulk(
 }
 
     static void
-vtp_sgr_bulks(
+vtp_sgr_bulks_follow(
     int argc,
     int *args
 )
@@ -7413,6 +7413,150 @@ vtp_sgr_bulks(
     *p++ = 'm';
     *p = NUL;
     vtp_printf((char *)buf);
+}
+
+static DWORD g_dr;
+#define VTP_NPRINTF(s, n) WriteConsoleA(g_hConOut, s, (DWORD)n, &g_dr, NULL)
+
+#define SGR_X_5 \
+    index = (index + 1) & 0x07; \
+    if (str[index][0] == (char)args[2]) \
+    { \
+	VTP_NPRINTF((char *)&str[index][1], 11); \
+	return; \
+    }
+
+#define SGR_X_2 \
+    index = (index + 1) & 0x07; \
+    if (str[index][0] == (char)args[2] \
+	    && str[index][1] == (char)args[3] \
+	    && str[index][2] == (char)args[4]) \
+    { \
+	VTP_NPRINTF((char *)&str[index][3], 19); \
+	return; \
+    }
+
+    static void
+vtp_sgr_bulks(
+    int argc,
+    int *args)
+{
+    if (argc == 3 && args[1] == 5)
+    {
+	if (args[0] == 38)
+	{
+	    static char str[8][13] =
+	    {
+		"\0\033[38;5;000m", "\0\033[38;5;000m", "\0\033[38;5;000m",
+		"\0\033[38;5;000m", "\0\033[38;5;000m", "\0\033[38;5;000m",
+		"\0\033[38;5;000m", "\0\033[38;5;000m",
+	    };
+	    static int head = 0;
+	    int index = head;
+
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    head = (head - 1) & 0x07;
+	    str[index][0] = (char)args[2];
+	    sprintf((char *)&str[index][8], "%03dm", args[2]);
+	    VTP_NPRINTF((char *)&str[index][1], 11);
+	}
+	else if (args[0] == 48)
+	{
+	    static char str[8][13] =
+	    {
+		"\0\033[48;5;000m", "\0\033[48;5;000m", "\0\033[48;5;000m",
+		"\0\033[48;5;000m", "\0\033[48;5;000m", "\0\033[48;5;000m",
+		"\0\033[48;5;000m", "\0\033[48;5;000m",
+	    };
+	    static int head = 0;
+	    int index = head;
+
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    SGR_X_5
+	    head = (head - 1) & 0x07;
+	    str[index][0] = (char)args[2];
+	    sprintf((char *)&str[index][8], "%03dm", args[2]);
+	    VTP_NPRINTF((char *)&str[index][1], 11);
+	}
+	else
+	    vtp_sgr_bulks_follow(argc, args);
+    }
+    else if (argc == 5 && args[1] == 2)
+    {
+	if (args[0] == 38)
+	{
+	    static char str[8][23] =
+	    {
+		"\0\0\0\033[38;2;000;000;000m", "\0\0\0\033[38;2;000;000;000m",
+		"\0\0\0\033[38;2;000;000;000m", "\0\0\0\033[38;2;000;000;000m",
+		"\0\0\0\033[38;2;000;000;000m", "\0\0\0\033[38;2;000;000;000m",
+		"\0\0\0\033[38;2;000;000;000m", "\0\0\0\033[38;2;000;000;000m",
+	    };
+	    static int head = 0;
+	    int index = head;
+
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    head = (head - 1) & 0x07;
+	    str[index][0] = (char)args[2];
+	    str[index][1] = (char)args[3];
+	    str[index][2] = (char)args[4];
+	    sprintf((char *)&str[index][10], "%03d;%03d;%03dm",
+						    args[2], args[3], args[4]);
+	    VTP_NPRINTF((char *)&str[index][3], 19);
+	}
+	else if (args[0] == 48)
+	{
+	    static char str[8][23] =
+	    {
+		"\0\0\0\033[48;2;000;000;000m", "\0\0\0\033[48;2;000;000;000m",
+		"\0\0\0\033[48;2;000;000;000m", "\0\0\0\033[48;2;000;000;000m",
+		"\0\0\0\033[48;2;000;000;000m", "\0\0\0\033[48;2;000;000;000m",
+		"\0\0\0\033[48;2;000;000;000m", "\0\0\0\033[48;2;000;000;000m",
+	    };
+	    static int head = 0;
+	    int index = head;
+
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    SGR_X_2
+	    head = (head - 1) & 0x07;
+	    str[index][0] = (char)args[2];
+	    str[index][1] = (char)args[3];
+	    str[index][2] = (char)args[4];
+	    sprintf((char *)&str[index][10], "%03d;%03d;%03dm",
+						    args[2], args[3], args[4]);
+	    VTP_NPRINTF((char *)&str[index][3], 19);
+	}
+	else
+	    vtp_sgr_bulks_follow(argc, args);
+    }
+    else
+	vtp_sgr_bulks_follow(argc, args);
 }
 
 # ifdef FEAT_TERMGUICOLORS
