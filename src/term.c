@@ -2477,7 +2477,12 @@ out_flush(void)
 	// set out_pos to 0 before ui_write, to avoid recursiveness
 	len = out_pos;
 	out_pos = 0;
-	ui_write(out_buf, len);
+#ifdef FEAT_VTP
+	if (vtp_can_skip_redraw())
+	    vtp_maybe_redraw();
+	else
+#endif
+	    ui_write(out_buf, len);
     }
 }
 

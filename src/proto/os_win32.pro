@@ -80,4 +80,6 @@ int has_conpty_working(void);
 int get_conpty_type(void);
 int is_conpty_stable(void);
 void resize_console_buf(void);
+int vtp_can_skip_redraw(void);
+void vtp_maybe_redraw(void);
 /* vim: set ft=c : */

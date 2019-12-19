@@ -197,6 +197,7 @@ static void vtp_exit();
 static int vtp_printf(char *format, ...);
 static void vtp_sgr_bulk(int arg);
 static void vtp_sgr_bulks(int argc, int *argv);
+static long vtp_req_maybe_redraw = 0;
 
 static guicolor_T save_console_bg_rgb;
 static guicolor_T save_console_fg_rgb;
@@ -1518,6 +1519,14 @@ WaitForChar(long msec, int ignore_input)
 	    serverProcessPendingMessages();
 # endif
 	}
+
+# ifdef FEAT_VTP
+	if (vtp_req_maybe_redraw)
+	{
+	    vtp_req_maybe_redraw = FALSE;
+	    redraw_all_later(CLEAR);
+	}
+# endif
 
 	if (g_nMouseClick != -1
 # ifdef FEAT_CLIENTSERVER
@@ -7576,5 +7585,27 @@ resize_console_buf(void)
 
 	SetConsoleScreenBufferSize(g_hConOut, coord);
     }
+}
+#endif
+
+#ifdef FEAT_VTP
+    int
+vtp_can_skip_redraw(void)
+{
+    DWORD cRecords = 0;
+    INPUT_RECORD ir;
+
+    if (vtp_req_maybe_redraw)
+	return TRUE;
+
+    peek_console_input(g_hConIn, &ir, 1, &cRecords);
+    return (cRecords != 0 && ir.EventType == KEY_EVENT
+					        && ir.Event.KeyEvent.bKeyDown);
+}
+
+    void
+vtp_maybe_redraw(void)
+{
+    vtp_req_maybe_redraw = TRUE;
 }
 #endif
