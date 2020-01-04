@@ -649,7 +649,7 @@ OPTFLAG = /O1
 ! elseif "$(OPTIMIZE)" == "SPEED"
 OPTFLAG = /O2
 ! else # MAXSPEED
-OPTFLAG = /Ox
+OPTFLAG = /Od
 ! endif
 
 ! if $(MSVC_MAJOR) >= 8
