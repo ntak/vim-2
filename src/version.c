@@ -1419,6 +1419,7 @@ intro_message(
 #ifdef MODIFIED_BY
 	" ",
 #endif
+	"  ",
 	N_("Vim is open source and freely distributable"),
 	"",
 	N_("Help poor children in Uganda!"),
@@ -1443,6 +1444,7 @@ intro_message(
 #ifdef MODIFIED_BY
 	NULL,
 #endif
+	NULL,
 	NULL,
 	NULL,
 	NULL,
@@ -1528,6 +1530,7 @@ do_intro_line(
     char_u	*p;
     int		l;
     int		clen;
+    char_u	*envintro;
 #ifdef MODIFIED_BY
 # define MODBY_LEN 150
     char_u	modby[MODBY_LEN];
@@ -1540,6 +1543,14 @@ do_intro_line(
 	mesg = modby;
     }
 #endif
+
+    if (STRCMP(mesg, "  ") == 0)
+    {
+	envintro = mch_getenv("VIMINTRO");
+	if (!envintro)
+	    return;
+	mesg = envintro;
+    }
 
     // Center the message horizontally.
     col = vim_strsize(mesg);
