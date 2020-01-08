@@ -4468,3 +4468,208 @@ get_special_pty_type(void)
     return 0;
 #endif
 }
+
+#ifdef MSWIN
+#include <windows.h>
+#include <dbghelp.h>
+
+typedef NTSYSAPI USHORT (*PfnRtlCaptureStackBackTrace)(ULONG, ULONG, PVOID*, PULONG);
+static PfnRtlCaptureStackBackTrace pRtlCaptureStackBackTrace;
+
+    int
+trace_init(void)
+{
+    HANDLE hNtdll;
+
+    hNtdll = GetModuleHandle("ntdll.dll");
+    if (hNtdll != NULL)
+    {
+	pRtlCaptureStackBackTrace =
+		(PfnRtlCaptureStackBackTrace)GetProcAddress(
+		hNtdll, "RtlCaptureStackBackTrace");
+	if (pRtlCaptureStackBackTrace != NULL)
+	{
+	    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES
+		    | SYMOPT_UNDNAME);
+
+	    if (SymInitialize(GetCurrentProcess(), NULL, TRUE))
+		return OK;
+	}
+    }
+
+    return FAIL;
+}
+
+    void
+trace_exit(void)
+{
+    SymCleanup(GetCurrentProcess());
+}
+
+    static void
+trace_address_to_string(void *address, char *buf, int size)
+{
+# ifdef _WIN64
+    IMAGEHLP_MODULE64	im;
+    IMAGEHLP_SYMBOL64	*pis;
+    IMAGEHLP_LINE64	il;
+
+    vim_memset(&im, 0, sizeof(IMAGEHLP_MODULE64));
+    im.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);
+    if (!SymGetModuleInfo64(GetCurrentProcess(), (DWORD64)address, &im))
+    {
+	vim_snprintf(buf, size, "0x%p @ -- @ -- @ --:--", address);
+	return;
+    }
+
+    char symbuf[MAX_PATH + sizeof(IMAGEHLP_SYMBOL64)];
+    vim_memset(symbuf, 0, sizeof(symbuf));
+    pis = (IMAGEHLP_SYMBOL64 *)symbuf;
+    pis->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+    pis->MaxNameLength = MAX_PATH;
+    DWORD64 d = 0;
+    if (!SymGetSymFromAddr64(GetCurrentProcess(), (DWORD64)address, &d, pis))
+    {
+	vim_snprintf(buf, size, "0x%p @ %s @ -- @ --:--", address,
+								im.ModuleName);
+	return;
+    }
+
+    vim_memset(&il, 0, sizeof(IMAGEHLP_LINE64));
+    il.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+    DWORD dd = 0;
+    if (!SymGetLineFromAddr64(GetCurrentProcess(), (DWORD64)address, &dd, &il))
+    {
+	vim_snprintf(buf, size, "0x%p @ %s @ %s @ %s+d", address,
+		im.ModuleName, pis->Name, pis->Name,
+		(int)((char *)address - (char *)il.Address));
+	return;
+    }
+    vim_snprintf(buf, size, "0x%p @ %s @ %s @ %s:%d", address,
+			 im.ModuleName, pis->Name, il.FileName, il.LineNumber);
+# else
+    IMAGEHLP_MODULE	im;
+    IMAGEHLP_SYMBOL	*pis;
+    IMAGEHLP_LINE	il;
+
+    vim_memset(&im, 0, sizeof(IMAGEHLP_MODULE));
+    im.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+    if (!SymGetModuleInfo(GetCurrentProcess(), (DWORD)address, &im))
+    {
+	vim_snprintf(buf, size, "0x%p @ -- @ -- @ --:--", address);
+	return;
+    }
+
+    char symbuf[MAX_PATH + sizeof(IMAGEHLP_SYMBOL)];
+    vim_memset(symbuf, 0, sizeof(symbuf));
+    pis = (IMAGEHLP_SYMBOL *)symbuf;
+    pis->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL);
+    pis->MaxNameLength = MAX_PATH;
+    DWORD d = 0;
+    if (!SymGetSymFromAddr(GetCurrentProcess(), (DWORD)address, &d, pis))
+    {
+	vim_snprintf(buf, size, "0x%p @ %s @ -- @ --:--", address,
+								im.ModuleName);
+	return;
+    }
+
+    vim_memset(&il, 0, sizeof(IMAGEHLP_LINE));
+    il.SizeOfStruct = sizeof(IMAGEHLP_LINE);
+    if (!SymGetLineFromAddr(GetCurrentProcess(), (DWORD)address, &d, &il))
+    {
+	vim_snprintf(buf, size, "0x%p @ %s @ %s @ %s+d", address,
+		im.ModuleName, pis->Name, pis->Name,
+		(int)((char *)address - (char *)il.Address));
+	return;
+    }
+    vim_snprintf(buf, size, "0x%p @ %s @ %s @ %s:%d", address,
+			 im.ModuleName, pis->Name, il.FileName, il.LineNumber);
+# endif
+}
+
+    int
+trace_capture(char *buf, int size)
+{
+    void    **sbuf;
+    int	    sbufsize;
+
+    sbuf = (void **)malloc(sizeof(void *) * 50);
+    if (sbuf == NULL)
+	return FAIL;
+
+    sbufsize = (int)pRtlCaptureStackBackTrace(0, 50, sbuf, NULL);
+
+    {
+	void	**address = sbuf;
+	int	wsize = 0;
+        int	i;
+
+	for (i = 0; i < sbufsize; i++)
+	{
+	    void *p = address[i];
+	    if (p == NULL)
+		break;
+
+	    trace_address_to_string(p, buf + wsize, size - wsize);
+	    wsize += (int)STRLEN(buf + wsize);
+
+	    if (size - wsize >= 2)
+	    {
+		strncat(buf + wsize, "\r\n", 2);
+		wsize += 2;
+	    }
+	    if (size <= wsize)
+		break;
+	}
+    }
+
+    free(sbuf);
+
+    return OK;
+}
+
+    int
+tsnprintf(char *buf, int size, char *format, ...)
+{
+    va_list list;
+    int result;
+
+    trace_init();
+    va_start(list, format);
+    result = vsnprintf(buf, size, format, list);
+    va_end(list);
+    trace_capture(&buf[result], size - result);
+    trace_exit();
+    return STRLEN(buf);
+}
+
+    void
+TMessageBox(const char *title, int mb, char *format, ...)
+{
+    va_list list;
+    char *buf;
+
+    buf = (char *)malloc(8192);
+    va_start(list, format);
+    tsnprintf(buf, 8192, format, list);
+    va_end(list);
+    MessageBox(NULL, buf, title, mb);
+    free(buf);
+}
+
+    int
+lprintf(const char * filename, char * format, ...)
+{
+    va_list list;
+    int result;
+    FILE *fp;
+
+    va_start(list, format);
+    fp = fopen(filename, "a+");
+    result = vfprintf(fp, format, list);
+    fclose(fp);
+    va_end(list);
+    return result;
+}
+
+#endif
