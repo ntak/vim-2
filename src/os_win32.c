@@ -5550,12 +5550,13 @@ clear_chars(
     COORD coord,
     DWORD n)
 {
-    DWORD dwDummy;
-
-    FillConsoleOutputCharacter(g_hConOut, ' ', n, coord, &dwDummy);
-
     if (!USE_VTP)
+    {
+	DWORD dwDummy;
+
+	FillConsoleOutputCharacter(g_hConOut, ' ', n, coord, &dwDummy);
 	FillConsoleOutputAttribute(g_hConOut, g_attrCurrent, n, coord, &dwDummy);
+    }
     else
     {
 	set_console_color_rgb();
@@ -6003,15 +6004,31 @@ write_chars(
     int		    length;
     int		    cp = enc_utf8 ? CP_UTF8 : enc_codepage;
 
-    length = MultiByteToWideChar(cp, 0, (LPCSTR)pchBuf, cbToWrite, 0, 0);
-    if (unicodebuf == NULL || length > unibuflen)
+    // The simplest case: convert -> break
+    // Initialization case: get first unicodebuf -> convert -> break
+    // Complex case: convert failed -> get new unicodebuf -> convert -> break
+    do
     {
+	length = MultiByteToWideChar(cp, 0, (LPCSTR)pchBuf, cbToWrite,
+							unicodebuf, unibuflen);
+	// State considered successful.
+	// length is larger than unibuflen only when getting the buffer size.
+	if (length && length <= unibuflen)
+	    break;
+
+	// If length == 0, function failure, the buffer is short.
+	// GetLastError() is always ERROR_INSUFFICIENT_BUFFER.
+
 	vim_free(unicodebuf);
-	unicodebuf = LALLOC_MULT(WCHAR, length);
-	unibuflen = length;
-    }
-    MultiByteToWideChar(cp, 0, (LPCSTR)pchBuf, cbToWrite,
-			unicodebuf, unibuflen);
+
+	// Can get zero size but cannot pass to API.
+	unicodebuf = length ? LALLOC_MULT(WCHAR, length) : NULL;
+
+	// Trick for re-evaluation.
+	// If unibuflen = 0, the required buffer size will be in length.
+	// If unibuflen == 0, the buffer size is in length.
+	unibuflen = unibuflen ? 0 : length;
+    } while (1);
 
     cells = mb_string2cells(pchBuf, cbToWrite);
 
@@ -7356,11 +7373,12 @@ vtp_printf(
     char_u  buf[100];
     va_list list;
     DWORD   result;
+    int	    len;
 
     va_start(list, format);
-    vim_vsnprintf((char *)buf, 100, (char *)format, list);
+    len = vim_vsnprintf((char *)buf, 100, (char *)format, list);
     va_end(list);
-    WriteConsoleA(g_hConOut, buf, (DWORD)STRLEN(buf), &result, NULL);
+    WriteConsoleA(g_hConOut, buf, (DWORD)len, &result, NULL);
     return (int)result;
 }
 
@@ -7368,10 +7386,7 @@ vtp_printf(
 vtp_sgr_bulk(
     int arg)
 {
-    int args[1];
-
-    args[0] = arg;
-    vtp_sgr_bulks(1, args);
+    vtp_printf("\033[%dm", arg & 0xff);
 }
 
     static void
