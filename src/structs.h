@@ -4056,3 +4056,15 @@ typedef struct
 // We have to guess how much a sequence of bytes may expand when converting
 // with iconv() to be able to allocate a buffer.
 #define ICONV_MULT 8
+
+typedef struct
+{
+    int	    ba_acline;		// The AC power status flag, -1 is unknown
+    int	    ba_system_battery;	// Battery presence flag, 255 is unknown
+    int	    ba_life_percent;	// The percentage of full battery charge
+				// remaining.  0 to 100, or 255 is unknown.
+    int	    ba_life_time;	// The number of seconds of battery life
+				// remaining.  -1 if unknown or AC power.
+    int	    ba_full_life_time;	// The number of seconds of battery life when
+				// at full charge.  -1 if full battery.
+} battery_T;

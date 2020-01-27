@@ -450,6 +450,7 @@ static funcentry_T global_functions[] =
     {"function",	1, 3, FEARG_1,	  &t_any,	f_function},
     {"garbagecollect",	0, 1, 0,	  &t_void,	f_garbagecollect},
     {"get",		2, 3, FEARG_1,	  &t_any,	f_get},
+    {"getbattery",	0, 0, 0,	  &t_dict_number, f_getbattery},
     {"getbufinfo",	0, 1, 0,	  &t_list_dict_any, f_getbufinfo},
     {"getbufline",	2, 3, FEARG_1,	  &t_list_string, f_getbufline},
     {"getbufvar",	2, 3, FEARG_1,	  &t_any,	f_getbufvar},

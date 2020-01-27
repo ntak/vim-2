@@ -7576,3 +7576,20 @@ resize_console_buf(void)
     }
 }
 #endif
+
+    battery_T
+mch_battery_status(void)
+{
+    SYSTEM_POWER_STATUS sps;
+    battery_T bat;
+
+    GetSystemPowerStatus(&sps);
+    bat.ba_acline = sps.ACLineStatus;
+    bat.ba_system_battery = (sps.BatteryFlag & 0x80)
+					 ? ((sps.BatteryFlag == 255) ? 255 : 1)
+					 : 0;
+    bat.ba_life_percent = sps.BatteryLifePercent;
+    bat.ba_life_time = sps.BatteryLifeTime;
+    bat.ba_full_life_time = sps.BatteryFullLifeTime;
+    return bat;
+}

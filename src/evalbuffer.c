@@ -806,6 +806,37 @@ f_setline(typval_T *argvars, typval_T *rettv)
 
     set_buffer_lines(curbuf, lnum, FALSE, &argvars[1], rettv);
 }
+
+/*
+ * "getbattery()" function
+ */
+    void
+f_getbattery(typval_T *argvars UNUSED, typval_T *rettv)
+{
+    dict_T *dict;
+
+    dict = dict_alloc();
+    if (dict == NULL)
+	rettv_dict_alloc(rettv);
+    else
+    {
+#ifdef MSWIN
+	battery_T bat = mch_battery_status();
+	dict_add_number(dict, "ac", bat.ba_acline);
+	dict_add_number(dict, "battery", bat.ba_system_battery);
+	dict_add_number(dict, "lifepercent", bat.ba_life_percent);
+	dict_add_number(dict, "lifetime", bat.ba_life_time);
+	dict_add_number(dict, "full", bat.ba_full_life_time);
+#else
+	dict_add_number(dict, "ac", -1);
+	dict_add_number(dict, "battery", 255);
+	dict_add_number(dict, "lifepercent", 255);
+	dict_add_number(dict, "lifetime", -1);
+	dict_add_number(dict, "full", -1);
+#endif
+	rettv_dict_set(rettv, dict);
+    }
+}
 #endif  // FEAT_EVAL
 
 #if defined(FEAT_JOB_CHANNEL) \
