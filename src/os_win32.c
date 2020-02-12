@@ -6376,6 +6376,10 @@ mch_write(
 		delete_lines(1);
 		goto got3;
 
+	    case 'm':
+		normvideo();
+		goto got3;
+
 	    case 'S':
 		termcap_mode_start();
 		goto got3;
