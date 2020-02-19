@@ -2667,5 +2667,6 @@ long elapsed(DWORD start_tick);
 #define VTP_DISABLE_EDGEFILL	1
 #define VTP_DISABLE_FORCEMODE	2
 #define VTP_ENABLE_FORCEMODE	4
+#define VTP_ENABLE_LAZYCOLOR	8
 
 #endif // VIM__H

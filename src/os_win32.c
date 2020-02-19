@@ -7429,6 +7429,8 @@ vtp_flag_set_from_env(void)
 	    vtp_flag |= VTP_ENABLE_FORCEMODE;
 	if (strstr((char *)env, "forcemode:auto") != NULL)
 	    vtp_flag &= ~(VTP_DISABLE_FORCEMODE | VTP_ENABLE_FORCEMODE);
+	if (strstr((char *)env, "lazycolor:enable") != NULL)
+	    vtp_flag |= VTP_ENABLE_LAZYCOLOR;
     }
 }
 
@@ -7533,6 +7535,9 @@ vtp_sgr_bulks(
     in = out = 0;
     while (in < argc || out < argc)
     {
+	if ((vtp_flag & VTP_ENABLE_LAZYCOLOR) == 0)
+	    sgrfgr = sgrfgg = sgrfgb = sgrbgr = sgrbgg = sgrbgb = -1;
+
 	switch (args[in])
 	{
 	    case 30: case 31: case 32: case 33:
