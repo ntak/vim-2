@@ -1485,9 +1485,6 @@ do_highlight(
 		redraw_all_later(NOT_VALID);
 	    }
 #endif
-#ifdef FEAT_VTP
-	    control_console_color_rgb();
-#endif
 	}
 #ifdef FEAT_TERMINAL
 	else if (is_terminal_group)
