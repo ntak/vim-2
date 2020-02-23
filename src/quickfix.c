@@ -6042,6 +6042,10 @@ ex_vimgrep(exarg_T *eap)
     char_u	*target_dir = NULL;
     char_u	*au_name =  NULL;
     int		status;
+#ifdef MSWIN
+    char	savedir[MAX_PATH];
+    char	*temp;
+#endif
 
     au_name = vgr_get_auname(eap->cmdidx);
     if (au_name != NULL && apply_autocmds(EVENT_QUICKFIXCMDPRE, au_name,
@@ -6056,6 +6060,24 @@ ex_vimgrep(exarg_T *eap)
     qi = qf_cmd_get_or_alloc_stack(eap, &wp);
     if (qi == NULL)
 	return;
+
+#ifdef MSWIN
+    GetCurrentDirectory(sizeof(savedir) / sizeof(savedir[0]), savedir);
+    temp = mch_getenv("TEMP");
+    if (temp != NULL)
+    {
+	char  fullpath[MAX_PATH];
+	DWORD result;
+
+	result = GetFullPathName(temp, sizeof(fullpath) / sizeof(fullpath[0]),
+							       fullpath, NULL);
+	if (result >= 2 && fullpath[1] == ':')
+	{
+	    fullpath[2] = NUL;
+	    SetCurrentDirectory(fullpath);
+	}
+    }
+#endif
 
     if (vgr_process_args(eap, &args) == FAIL)
 	goto theend;
@@ -6131,6 +6153,10 @@ theend:
     vim_free(args.qf_title);
     vim_free(target_dir);
     vim_regfree(args.regmatch.regprog);
+
+#ifdef MSWIN
+    SetCurrentDirectory(savedir);
+#endif
 }
 
 /*
