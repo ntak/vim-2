@@ -6398,10 +6398,18 @@ mch_write(
     char_u  *s,
     int	    len)
 {
+    static int goesout = 0;
+
 # ifdef VIMDLL
     if (gui.in_use)
 	return;
 # endif
+
+    if (!goesout)
+    {
+	SetCursorPos(GetSystemMetrics(SM_CXSCREEN), 0);
+	goesout = 1;
+    }
 
     s[len] = NUL;
 
