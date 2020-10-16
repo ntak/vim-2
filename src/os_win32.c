@@ -320,6 +320,47 @@ make_ambiwidth_event(
     down->Event.KeyEvent.dwControlKeyState = 0;
 }
 
+    static BOOL
+basic_console_input(
+    int		 command,
+    INPUT_RECORD *lpBuffer)
+{
+    enum
+    {
+	CSIZE = 10
+    };
+    static INPUT_RECORD cbuf[CSIZE];
+    static DWORD cindex = 0;
+    static DWORD cmax = 0;
+    BOOL rv;
+    DWORD events;
+    int head;
+    int tail;
+    int i;
+    static BOOL latching = FALSE;
+
+    if (!win8_or_later)
+    {
+	switch (command)
+	{
+	case 0: // latch
+	    if (latching)
+		return FALSE;
+	    rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+	    rv = (latching) ? events = 0, TRUE : 
+	    return latching = (rv && events == 0) ? FALSE : rv;
+	case 1: // can_latch
+	    rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+	    return (cmax > 0 || (rv && events > 0));
+	case 2: // latching
+	    return latching;
+	case 3: // unlatch
+	    
+	    
+	}
+    }
+}
+
 /*
  * Version of ReadConsoleInput() that works with IME.
  * Works around problems on Windows 8.
@@ -416,19 +457,6 @@ read_console_input(
     return TRUE;
 }
 
-/*
- * Version of PeekConsoleInput() that works with IME.
- */
-    static BOOL
-peek_console_input(
-    HANDLE	    hInput,
-    INPUT_RECORD    *lpBuffer,
-    DWORD	    nLength UNUSED,
-    LPDWORD	    lpEvents)
-{
-    return read_console_input(hInput, lpBuffer, -1, lpEvents);
-}
-
 # ifdef FEAT_CLIENTSERVER
     static DWORD
 msg_wait_for_multiple_objects(
@@ -438,7 +466,9 @@ msg_wait_for_multiple_objects(
     DWORD    dwMilliseconds,
     DWORD    dwWakeMask)
 {
-    if (read_console_input(NULL, NULL, -2, NULL))
+    INPUT_RECORD ir;
+
+    if (can_latch_console_input())
 	return WAIT_OBJECT_0;
     return MsgWaitForMultipleObjects(nCount, pHandles, fWaitAll,
 				     dwMilliseconds, dwWakeMask);
@@ -451,7 +481,7 @@ wait_for_single_object(
     HANDLE hHandle,
     DWORD dwMilliseconds)
 {
-    if (read_console_input(NULL, NULL, -2, NULL))
+    if (can_latch_console_input())
 	return WAIT_OBJECT_0;
     return WaitForSingleObject(hHandle, dwMilliseconds);
 }
@@ -1334,33 +1364,36 @@ decode_mouse_event(
 			INPUT_RECORD ir;
 			MOUSE_EVENT_RECORD* pmer2 = &ir.Event.MouseEvent;
 
-			peek_console_input(g_hConIn, &ir, 1, &cRecords);
-
-			if (cRecords == 0 || ir.EventType != MOUSE_EVENT
+			if (!latch_console_input(&ir)
+				|| ir.EventType != MOUSE_EVENT
 				|| !(pmer2->dwButtonState & LEFT_RIGHT))
+			{
+			    unlatch_console_input();
 			    break;
+			}
 			else
 			{
 			    if (pmer2->dwEventFlags != MOUSE_MOVED)
 			    {
-				read_console_input(g_hConIn, &ir, 1, &cRecords);
-
+				consume_console_input();
 				return decode_mouse_event(pmer2);
 			    }
 			    else if (s_xOldMouse == pmer2->dwMousePosition.X &&
 				     s_yOldMouse == pmer2->dwMousePosition.Y)
 			    {
-				// throw away spurious mouse move
-				read_console_input(g_hConIn, &ir, 1, &cRecords);
-
-				// are there any more mouse events in queue?
-				peek_console_input(g_hConIn, &ir, 1, &cRecords);
-
-				if (cRecords==0 || ir.EventType != MOUSE_EVENT)
+				consume_console_input();
+				if (!latch_console_input(&ir)
+					|| ir.EventType != MOUSE_EVENT)
+				{
+				    unlatch_console_event();
 				    break;
+				}
 			    }
 			    else
+			    {
+				unlatch_console_event();
 				break;
+			    }
 			}
 		    }
 		}
@@ -1538,7 +1571,6 @@ WaitForChar(long msec, int ignore_input)
 {
     DWORD	    dwNow = 0, dwEndTime = 0;
     INPUT_RECORD    ir;
-    DWORD	    cRecords;
     WCHAR	    ch, ch2;
 # ifdef FEAT_TIMERS
     int		    tb_change_cnt = typebuf.tb_change_cnt;
@@ -1642,8 +1674,7 @@ WaitForChar(long msec, int ignore_input)
 		continue;
 	}
 
-	cRecords = 0;
-	peek_console_input(g_hConIn, &ir, 1, &cRecords);
+	latch_console_input(&ir);
 
 # ifdef FEAT_MBYTE_IME
 	if (State & CMDLINE && msg_row == Rows - 1)
@@ -1664,7 +1695,7 @@ WaitForChar(long msec, int ignore_input)
 	}
 # endif
 
-	if (cRecords > 0)
+	if (latching_console_input())
 	{
 	    if (ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown)
 	    {
@@ -1674,7 +1705,7 @@ WaitForChar(long msec, int ignore_input)
 		if (ir.Event.KeyEvent.UChar == 0
 			&& ir.Event.KeyEvent.wVirtualKeyCode == 13)
 		{
-		    read_console_input(g_hConIn, &ir, 1, &cRecords);
+		    consume_console_input();
 		    continue;
 		}
 # endif
@@ -1683,7 +1714,7 @@ WaitForChar(long msec, int ignore_input)
 		    return TRUE;
 	    }
 
-	    read_console_input(g_hConIn, &ir, 1, &cRecords);
+	    consume_console_input();
 
 	    if (ir.EventType == FOCUS_EVENT)
 		handle_focus_event(ir);
@@ -1784,13 +1815,15 @@ tgetch(int *pmodifiers, WCHAR *pch2)
 	if (g_nMouseClick != -1)
 	    return 0;
 # endif
-	if (read_console_input(g_hConIn, &ir, 1, &cRecords) == 0)
+	if (!latch_console_input(&ir))
 	{
 	    if (did_create_conin)
 		read_error_exit();
 	    create_conin();
 	    continue;
 	}
+
+	consume_console_input();
 
 	if (ir.EventType == KEY_EVENT)
 	{
