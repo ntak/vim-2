@@ -344,19 +344,76 @@ basic_console_input(
 	switch (command)
 	{
 	case 0: // latch
-	    if (latching)
-		return FALSE;
-	    rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-	    rv = (latching) ? events = 0, TRUE : 
+	    rv = (latching)
+		    ? events = 0, TRUE
+		    : PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
 	    return latching = (rv && events == 0) ? FALSE : rv;
 	case 1: // can_latch
-	    rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-	    return (cmax > 0 || (rv && events > 0));
+	    return PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events)
+		    && events > 0
+		    && !latching;
 	case 2: // latching
 	    return latching;
 	case 3: // unlatch
-	    
-	    
+	    return (latching = FALSE), TRUE;
+	case 4: // consume
+	    ReadConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+	}
+	return TRUE;
+    }
+
+    if (cmax == 0)
+    {
+	switch (command)
+	{
+	case 0: // latch
+	    if (!USE_WT)
+	    {
+		rv = (latching)
+			? events = 0, TRUE
+			: PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+		return latching = (rv && events == 0) ? FALSE : rv;
+	    }
+	    else
+	    {
+		if (latching)
+		    return FALSE;
+		else
+		{
+		    GetNumberOfConsoleInputEvents(g_hConIn, &events);
+		    if (events == 0)
+			return FALSE;
+		    ReadConsoleInputW(g_hConIn, cbuf, CSIZE, &events);
+		    cindex = 0;
+		    cmax = events;
+		    for (i = 0; i < (int)cmax - 1; ++i)
+			if (is_ambiwidth_event(&cbuf[i]))
+			    make_ambiwidth_event(&cbuf[i], &cbuf[i + 1]);
+
+		    if (cmax > 1)
+		    {
+			head = 0;
+			tail = cmax - 1;
+			while (head != tail)
+			{
+			    if (cbuf[head].EventType
+						   == WINDOW_BUFFER_SIZE_EVENT
+				&& cbuf[head + 1].EventType
+						   == WINDOW_BUFFER_SIZE_EVENT)
+			    {
+				for (i = head; i < tail; ++i)
+				    cbuf[i] = cbuf[i + 1];
+				--tail;
+				continue;
+			    }
+			    head++;
+			}
+			cmax = tail + 1;
+		    }
+		}
+	    }
+	    break;
+	case 1: // can_latch
 	}
     }
 }
