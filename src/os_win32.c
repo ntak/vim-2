@@ -320,6 +320,43 @@ make_ambiwidth_event(
     down->Event.KeyEvent.dwControlKeyState = 0;
 }
 
+#define LATCHOP_LATCH     0
+#define LATCHOP_CAN_LATCH 1
+#define LATCHOP_LATCHING  2
+#define LATCHOP_UNLATCH   3
+#define LATCHOP_CONSUME   4
+
+    static BOOL
+bulk_latcher(
+    int		 command,
+    INPUT_RECORD *lpBuffer)
+{
+    static BOOL latching = FALSE;
+    DWORD events;
+    BOOL rv;
+
+    switch (command)
+    {
+    case LATCHOP_LATCH:
+	rv = (latching)
+		? events = 0, TRUE
+		: PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+	return latching = (rv && events == 0) ? FALSE : rv;
+    case LATCHOP_CAN_LATCH:
+	return PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events)
+		&& events > 0
+		&& !latching;
+    case LATCHOP_LATCHING:
+	return latching;
+    case LATCHOP_UNLATCH:
+	return (latching = FALSE), TRUE;
+    case LATCHOP_CONSUME:
+	ReadConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+    }
+
+    return TRUE;
+}
+
     static BOOL
 basic_console_input(
     int		 command,
@@ -338,83 +375,86 @@ basic_console_input(
     int tail;
     int i;
     static BOOL latching = FALSE;
+    BOOL guard_latch;
 
     if (!win8_or_later)
-    {
-	switch (command)
-	{
-	case 0: // latch
-	    rv = (latching)
-		    ? events = 0, TRUE
-		    : PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-	    return latching = (rv && events == 0) ? FALSE : rv;
-	case 1: // can_latch
-	    return PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events)
-		    && events > 0
-		    && !latching;
-	case 2: // latching
-	    return latching;
-	case 3: // unlatch
-	    return (latching = FALSE), TRUE;
-	case 4: // consume
-	    ReadConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-	}
-	return TRUE;
-    }
+	return bulk_latcher(command, lpBuffer);
 
-    if (cmax == 0)
+    switch (command)
     {
-	switch (command)
+    case LATCHOP_LATCH:
+
+	guard_latch = latching;
+	latching = TRUE;
+
+	if (guard_latch)
+	    return FALSE;
+	    
+	if (cmax == 0)
 	{
-	case 0: // latch
-	    if (!USE_WT)
+	    if (USE_WT)
 	    {
-		rv = (latching)
-			? events = 0, TRUE
-			: PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-		return latching = (rv && events == 0) ? FALSE : rv;
-	    }
-	    else
-	    {
-		if (latching)
-		    return FALSE;
-		else
+		GetNumberOfConsoleInputEvents(g_hConIn, &events);
+		if (events == 0)
 		{
-		    GetNumberOfConsoleInputEvents(g_hConIn, &events);
-		    if (events == 0)
-			return FALSE;
-		    ReadConsoleInputW(g_hConIn, cbuf, CSIZE, &events);
-		    cindex = 0;
-		    cmax = events;
-		    for (i = 0; i < (int)cmax - 1; ++i)
-			if (is_ambiwidth_event(&cbuf[i]))
-			    make_ambiwidth_event(&cbuf[i], &cbuf[i + 1]);
-
-		    if (cmax > 1)
-		    {
-			head = 0;
-			tail = cmax - 1;
-			while (head != tail)
-			{
-			    if (cbuf[head].EventType
-						   == WINDOW_BUFFER_SIZE_EVENT
-				&& cbuf[head + 1].EventType
-						   == WINDOW_BUFFER_SIZE_EVENT)
-			    {
-				for (i = head; i < tail; ++i)
-				    cbuf[i] = cbuf[i + 1];
-				--tail;
-				continue;
-			    }
-			    head++;
-			}
-			cmax = tail + 1;
-		    }
+		    latching = FALSE;
+		    return FALSE;
 		}
 	    }
-	    break;
-	case 1: // can_latch
+
+	    ReadConsoleInputW(g_hConIn, cbuf, CSIZE, &events);
+	    cindex = 0;
+	    cmax = events;
+
+	    for (i = 0; i < (int)cmax - 1; ++i)
+		if (is_ambiwidth_event(&cbuf[i]))
+		    make_ambiwidth_event(&cbuf[i], &cbuf[i + 1]);
+
+	    if (cmax > 1)
+	    {
+		head = 0;
+		tail = cmax - 1;
+		while (head != tail)
+		{
+		    if (cbuf[head].EventType == WINDOW_BUFFER_SIZE_EVENT
+			&& cbuf[head + 1].EventType == WINDOW_BUFFER_SIZE_EVENT)
+		    {
+			for (i = head; i < tail; ++i)
+			    cbuf[i] = cbuf[i + 1];
+			--tail;
+			continue;
+		    }
+		    head++;
+		}
+		cmax = tail + 1;
+	    }
 	}
+
+	*lpBuffer = cbuf[cindex];
+	return TRUE;
+
+    }
+	if (cmax > 0)
+	{
+	    *lpBuffer = cbuf[cindex];
+	    latching = TRUE;
+	    return TRUE;
+	}
+	else
+	{
+	    rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+	    return latching = (rv && events == 0) ? FALSE : rv;
+	}
+	break;
+    case LATCHOP_CAN_LATCH:
+	rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+	return cmax > 0 || (rv && events > 0);
+    case LATCHOP_LATCHING:
+	return latching;
+    case LATCHOP_UNLATCH:
+	return (latching = FALSE), TRUE;
+    case LATCHOP_CONSUME:
+	;
     }
 }
 
