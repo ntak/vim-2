@@ -357,50 +357,87 @@ bulk_latcher(
     return TRUE;
 }
 
+#define CSIZE 10
+typedef BOOL(*latcher_t)(int, INPUT_RECORD *);
+static BOOL cin_create(int command, INPUT_RECORD *lpBuffer);
+static latcher_t os_latcher;
+static latcher_t latcher = cin_create;
+static void create_conin(void);
+
     static BOOL
-basic_console_input(
+cin_create(
     int		 command,
     INPUT_RECORD *lpBuffer)
 {
-    enum
-    {
-	CSIZE = 10
-    };
+    if (!did_create_conin)
+	create_conin();
+    latcher = os_latcher;
+    return latcher(command, lpBuffer);
+}
+
+    static BOOL
+locked_latcher(
+    int		 command UNUSED,
+    INPUT_RECORD *lpBuffer UNUSED)
+{
+    return FALSE;
+}
+
+    static BOOL
+latch_console_input(
+    INPUT_RECORD *lpBuffer)
+{
+    return latcher(LATCHOP_LATCH, lpBuffer);
+}
+
+    static BOOL
+can_latch_console_input(void)
+{
+    return latcher(LATCHOP_CAN_LATCH, NULL);
+}
+
+    static BOOL
+latching_console_input(void)
+{
+    return latcher(LATCHOP_LATCHING, NULL);
+}
+
+    static BOOL
+unlatch_console_input(void)
+{
+    return latcher(LATCHOP_UNLATCH, NULL);
+}
+
+
+
+    static BOOL
+buffered_latcher(
+    int		 command,
+    INPUT_RECORD *lpBuffer)
+{
+    latcher_t saved_latcher = latcher, mutex = (latcher = locked_latcher);
     static INPUT_RECORD cbuf[CSIZE];
     static DWORD cindex = 0;
     static DWORD cmax = 0;
     BOOL rv;
+    INPUT_RECORD record;
     DWORD events;
     int head;
     int tail;
     int i;
-    static BOOL latching = FALSE;
-    BOOL guard_latch;
-
-    if (!win8_or_later)
-	return bulk_latcher(command, lpBuffer);
 
     switch (command)
     {
     case LATCHOP_LATCH:
-
-	guard_latch = latching;
-	latching = TRUE;
-
-	if (guard_latch)
-	    return FALSE;
-	    
 	if (cmax == 0)
 	{
 	    if (USE_WT)
-	    {
 		GetNumberOfConsoleInputEvents(g_hConIn, &events);
-		if (events == 0)
-		{
-		    latching = FALSE;
-		    return FALSE;
-		}
-	    }
+	    else
+		PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
+
+	    if (events == 0)
+		return (latcher = saved_latcher), FALSE;
 
 	    ReadConsoleInputW(g_hConIn, cbuf, CSIZE, &events);
 	    cindex = 0;
@@ -429,33 +466,24 @@ basic_console_input(
 		cmax = tail + 1;
 	    }
 	}
-
 	*lpBuffer = cbuf[cindex];
-	return TRUE;
+	return (latcher = locked_latcher), TRUE;
 
-    }
-	if (cmax > 0)
-	{
-	    *lpBuffer = cbuf[cindex];
-	    latching = TRUE;
-	    return TRUE;
-	}
-	else
-	{
-	    rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-	    return latching = (rv && events == 0) ? FALSE : rv;
-	}
-	break;
     case LATCHOP_CAN_LATCH:
-	rv = PeekConsoleInputW(g_hConIn, lpBuffer, 1, &events);
-	return cmax > 0 || (rv && events > 0);
+	rv = PeekConsoleInputW(g_hConIn, &record, 1, &events);
+	return (latcher = saved_latcher), (cmax > 0 || (rv && events > 0));
+
     case LATCHOP_LATCHING:
-	return latching;
+	return latcher == locked_latcher;
+
     case LATCHOP_UNLATCH:
-	return (latching = FALSE), TRUE;
+	return (latcher = os_latcher), TRUE;
+
     case LATCHOP_CONSUME:
-	;
+	if (++cindex >= cmax)
+	    cmax = cindex = 0;
     }
+    return TRUE;
 }
 
 /*
@@ -1016,6 +1044,8 @@ PlatformId(void)
 #endif
 	done = TRUE;
     }
+
+    os_latcher = (win8_or_later) ? bulk_latcher : buffered_latcher;
 }
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
