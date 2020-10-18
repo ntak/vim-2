@@ -439,7 +439,7 @@ buffered_latcher(
     case LATCHOP_LATCH:
 	{
 	    FILE *fp = fopen("log", "a+");
-	    fprintf(fp, "LATCH ");
+	    fprintf(fp, "LATCH(%ld,%ld) ", cmax, cindex);
 	    fclose(fp);
 	}
 	if (cmax == 0)
@@ -488,6 +488,12 @@ buffered_latcher(
 	    }
 	}
 
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "LATCHACCEPT(%ld,%ld,%c) ", cmax, cindex, (*lpBuffer).Event.KeyEvent.uChar.AsciiChar);
+	    fclose(fp);
+	}
+
 	return TRUE;
 
     case LATCHOP_CAN_LATCH:
@@ -497,6 +503,19 @@ buffered_latcher(
 	    fclose(fp);
 	}
 	GetNumberOfConsoleInputEvents(g_hConIn, &events);
+	{
+	    FILE *fp = fopen("log", "a+");
+	    if (saved_latcher == locked_latcher)
+		fprintf(fp, "LOCKEDLATCHER ");
+	    if (saved_latcher == os_latcher)
+		fprintf(fp, "OSLATCHER ");
+	    fclose(fp);
+	}
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "CAN_LATCH(%ld,%ld) ", cmax, events);
+	    fclose(fp);
+	}
 	return (latcher = saved_latcher), (cmax > 0 || events > 0);
 
     case LATCHOP_LATCHING:
@@ -505,7 +524,7 @@ buffered_latcher(
 	    fprintf(fp, "LATCHING ");
 	    fclose(fp);
 	}
-	return latcher = saved_latcher, saved_latcher == locked_latcher;
+	return (latcher = saved_latcher), (saved_latcher == locked_latcher);
 
     case LATCHOP_UNLATCH:
 	{
@@ -522,7 +541,7 @@ buffered_latcher(
     case LATCHOP_CONSUME:
 	{
 	    FILE *fp = fopen("log", "a+");
-	    fprintf(fp, "CONSUME\n");
+	    fprintf(fp, "CONSUME(%ld,%ld) ", cmax, cindex);
 	    fclose(fp);
 	}
 	if (saved_latcher != locked_latcher)
@@ -531,6 +550,11 @@ buffered_latcher(
 	    ++cbuf[cindex].Event.KeyEvent.wRepeatCount;
 	if (++cindex >= cmax)
 	    cmax = cindex = 0;
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "CONSUMEACCEPT\n");
+	    fclose(fp);
+	}
 	return (latcher = os_latcher), TRUE;
     }
 
@@ -1540,6 +1564,11 @@ decode_mouse_event(
 			INPUT_RECORD ir;
 			MOUSE_EVENT_RECORD* pmer2 = &ir.Event.MouseEvent;
 
+			{
+			    FILE *fp = fopen("log", "a+");
+			    fprintf(fp, "TYPE(3) ");
+			    fclose(fp);
+			}
 			if (!latch_console_input(&ir)
 				|| ir.EventType != MOUSE_EVENT
 				|| !(pmer2->dwButtonState & LEFT_RIGHT))
@@ -1559,6 +1588,11 @@ decode_mouse_event(
 				     s_yOldMouse == pmer2->dwMousePosition.Y)
 			    {
 				consume_console_input();
+				{
+				    FILE *fp = fopen("log", "a+");
+				    fprintf(fp, "TYPE(4) ");
+				    fclose(fp);
+				}
 				if (!latch_console_input(&ir)
 					|| ir.EventType != MOUSE_EVENT)
 				{
@@ -1839,7 +1873,7 @@ WaitForChar(long msec, int ignore_input)
 	    }
 # endif
 	    if (
-# if 0
+# if 1
 # ifdef FEAT_CLIENTSERVER
 		    // Wait for either an event on the console input or a
 		    // message in the client-server window.
@@ -1856,6 +1890,11 @@ WaitForChar(long msec, int ignore_input)
 		continue;
 	}
 
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "TYPE(1) ");
+	    fclose(fp);
+	}
 	latch_console_input(&ir);
 
 # ifdef FEAT_MBYTE_IME
@@ -1993,6 +2032,11 @@ tgetch(int *pmodifiers, WCHAR *pch2)
 	if (g_nMouseClick != -1)
 	    return 0;
 # endif
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "TYPE(2) ");
+	    fclose(fp);
+	}
 	if (!latch_console_input(&ir))
 	    continue;
 

@@ -1029,7 +1029,7 @@
  *			and the --remote argument
  */
 #if (defined(MSWIN) || defined(FEAT_XCLIPBOARD)) && defined(FEAT_EVAL)
-# define FEAT_CLIENTSERVER
+# define FEAT_CLIENTSERVER_
 #endif
 
 /*
