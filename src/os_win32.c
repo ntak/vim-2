@@ -1569,7 +1569,8 @@ decode_mouse_event(
 			    fprintf(fp, "TYPE(3) ");
 			    fclose(fp);
 			}
-			if (!latch_console_input(&ir)
+			if (can_latch_console_input()
+				|| !latch_console_input(&ir)
 				|| ir.EventType != MOUSE_EVENT
 				|| !(pmer2->dwButtonState & LEFT_RIGHT))
 			{
