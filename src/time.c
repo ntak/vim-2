@@ -367,11 +367,14 @@ proftime_time_left(proftime_T *due, proftime_T *now)
     static void
 insert_timer(timer_T *timer)
 {
+#if 0
     timer->tr_next = first_timer;
     timer->tr_prev = NULL;
     if (first_timer != NULL)
 	first_timer->tr_prev = timer;
     first_timer = timer;
+#else
+#endif
     did_add_timer = TRUE;
 }
 
@@ -454,11 +457,41 @@ check_due_timer(void)
     int		did_one = FALSE;
     int		need_update_screen = FALSE;
     long	current_id = last_timer_id;
+    static int	depth = 0;
+
+    ++depth;
+
+    {
+	FILE *fp = fopen("log", "a+");
+	fprintf(fp, "in(%d)\n", depth);
+	fclose(fp);
+    }
 
     // Don't run any timers while exiting or dealing with an error.
     if (exiting || aborting())
-	return next_due;
+    {
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "exit(%d)\n", depth);
+	    fclose(fp);
+	}
+	return --depth, next_due;
+    }
 
+    {
+	FILE *fp = fopen("log", "a+");
+	for (timer = first_timer; timer != NULL; timer = timer->tr_next)
+	    if (timer->tr_callback.cb_partial)
+		fprintf(fp, "{%d}[%ld]%p ", depth, timer->tr_id, timer->tr_callback.cb_partial->pt_func);
+	fprintf(fp, "\n-> ");
+	fclose(fp);
+    }
+
+    {
+	FILE *fp = fopen("log", "a+");
+	fprintf(fp, "-1 ");
+	fclose(fp);
+    }
     profile_start(&now);
     for (timer = first_timer; timer != NULL && !got_int; timer = timer_next)
     {
@@ -466,6 +499,11 @@ check_due_timer(void)
 
 	if (timer->tr_id == -1 || timer->tr_firing || timer->tr_paused)
 	    continue;
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "-2 ");
+	    fclose(fp);
+	}
 	this_due = proftime_time_left(&timer->tr_due, &now);
 	if (this_due <= 1)
 	{
@@ -478,6 +516,11 @@ check_due_timer(void)
 	    int save_must_redraw = must_redraw;
 	    int save_trylevel = trylevel;
 	    int save_did_throw = did_throw;
+	    {
+		FILE *fp = fopen("log", "a+");
+		fprintf(fp, "-3 ");
+		fclose(fp);
+	    }
 	    int save_ex_pressedreturn = get_pressedreturn();
 	    int save_may_garbage_collect = may_garbage_collect;
 	    except_T *save_current_exception = current_exception;
@@ -495,9 +538,20 @@ check_due_timer(void)
 	    did_throw = FALSE;
 	    current_exception = NULL;
 	    may_garbage_collect = FALSE;
+	    {
+		FILE *fp = fopen("log", "a+");
+		fprintf(fp, "-4 ");
+		fclose(fp);
+	    }
 	    save_vimvars(&vvsave);
 
 	    timer->tr_firing = TRUE;
+	    {
+		FILE *fp = fopen("log", "a+");
+		if (timer->tr_callback.cb_partial)
+		    fprintf(fp, "(%ld)%p ", timer->tr_id, timer->tr_callback.cb_partial->pt_func);
+		fclose(fp);
+	    }
 	    timer_callback(timer);
 	    timer->tr_firing = FALSE;
 
@@ -543,6 +597,12 @@ check_due_timer(void)
 	    next_due = this_due;
     }
 
+    {
+	FILE *fp = fopen("log", "a+");
+	fprintf(fp, "\n\n");
+	fclose(fp);
+    }
+
     if (did_one)
 	redraw_after_callback(need_update_screen);
 
@@ -571,10 +631,26 @@ check_due_timer(void)
 #endif
 #ifdef FEAT_TERMINAL
     // Some terminal windows may need their buffer updated.
+    {
+	FILE *fp = fopen("log", "a+");
+	fprintf(fp, "->term\n");
+	fclose(fp);
+    }
     next_due = term_check_timers(next_due, &now);
+    {
+	FILE *fp = fopen("log", "a+");
+	fprintf(fp, "<-term\n");
+	fclose(fp);
+    }
 #endif
 
-    return current_id != last_timer_id ? 1 : next_due;
+    {
+	FILE *fp = fopen("log", "a+");
+	fprintf(fp, "out(%d)\n", depth);
+	fclose(fp);
+    }
+
+    return --depth, current_id != last_timer_id ? 1 : next_due;
 }
 
 /*

@@ -2426,7 +2426,7 @@ struct timer_S
     long	tr_interval;	    // msec
     callback_T	tr_callback;
     int		tr_emsg_count;
-#endif
+# endif
 };
 
 #ifdef FEAT_CRYPT

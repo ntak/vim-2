@@ -444,6 +444,11 @@ ui_wait_for_chars_or_timer(
     {
 	// Trigger timers and then get the time in wtime until the next one is
 	// due.  Wait up to that time.
+	{
+	    FILE *fp = fopen("log", "a+");
+	    fprintf(fp, "ui\n");
+	    fclose(fp);
+	}
 	due_time = check_due_timer();
 	if (typebuf.tb_change_cnt != tb_change_cnt)
 	{

@@ -7121,7 +7121,15 @@ do_sleep(long msec)
 	wait_now = msec - done > 1000L ? 1000L : msec - done;
 #ifdef FEAT_TIMERS
 	{
-	    long    due_time = check_due_timer();
+	    long    due_time;
+
+	    {
+		FILE *fp = fopen("log", "a+");
+		fprintf(fp, "docmd\n");
+		fclose(fp);
+	    }
+
+	    due_time = check_due_timer();
 
 	    if (due_time > 0 && due_time < wait_now)
 		wait_now = due_time;

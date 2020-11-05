@@ -1618,7 +1618,17 @@ WaitForChar(long msec, int ignore_input)
 
 		// Trigger timers and then get the time in msec until the next
 		// one is due.  Wait up to that time.
+		{
+		    FILE *fp = fopen("log", "a+");
+		    fprintf(fp, "win32_in\n");
+		    fclose(fp);
+		}
 		due_time = check_due_timer();
+		{
+		    FILE *fp = fopen("log", "a+");
+		    fprintf(fp, "win32_out\n");
+		    fclose(fp);
+		}
 		if (typebuf.tb_change_cnt != tb_change_cnt)
 		{
 		    // timer may have used feedkeys().

@@ -2560,6 +2560,12 @@ serverGetReply(HWND server, int *expr_res, int remove, int wait, int timeout)
 	{
 # ifdef FEAT_TIMERS
 	    // TODO: use the return value to decide how long to wait.
+	    {
+		FILE *fp = fopen("log", "a+");
+		fprintf(fp, "mswin\n");
+		fclose(fp);
+	    }
+
 	    check_due_timer();
 # endif
 	    time(&now);
