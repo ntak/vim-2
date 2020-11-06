@@ -2924,6 +2924,13 @@ term_color(char_u *s, int n)
     }
     else
 	OUT_STR(tgoto((char *)s, 0, n));
+#ifdef FEAT_VTP
+    if (use_wt())
+    {
+	out_flush();
+	wt_colortable_cterm(n, (s[i] == '3'));
+    }
+#endif
 }
 
     void
@@ -3007,6 +3014,7 @@ term_rgb_color(char_u *s, guicolor_T rgb)
 	out_flush();
 	buf[1] = '[';
 	vtp_printf(buf);
+	wt_enable_acrylic();
     }
     else
 #endif
@@ -3017,12 +3025,18 @@ term_rgb_color(char_u *s, guicolor_T rgb)
 term_fg_rgb_color(guicolor_T rgb)
 {
     term_rgb_color(T_8F, rgb);
+#ifdef FEAT_VTP
+    wt_colortable_rgb(-1, RED(rgb), GREEN(rgb), BLUE(rgb), TRUE);
+#endif
 }
 
     void
 term_bg_rgb_color(guicolor_T rgb)
 {
     term_rgb_color(T_8B, rgb);
+#ifdef FEAT_VTP
+    wt_colortable_rgb(-1, RED(rgb), GREEN(rgb), BLUE(rgb), FALSE);
+#endif
 }
 
     void

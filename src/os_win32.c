@@ -200,11 +200,13 @@ static void vtp_sgr_bulks(int argc, int *argv);
 
 static int wt_working = 0;
 static void wt_init();
+static COLORREF wt_acrylic;
 
-static guicolor_T save_console_bg_rgb;
-static guicolor_T save_console_fg_rgb;
+static guicolor_T save_console_rgb[16];
 static guicolor_T store_console_bg_rgb;
 static guicolor_T store_console_fg_rgb;
+static int store_console_bg_attr;
+static int store_console_fg_attr;
 
 static int g_color_index_bg = 0;
 static int g_color_index_fg = 7;
@@ -6259,6 +6261,8 @@ write_chars(
 	if (WriteConsoleW(g_hConOut, *utf8usingbuf, length, &cchwritten,
 		    NULL) == 0 || cchwritten == 0)
 	    cchwritten = 1;
+	if (USE_WT)
+	    wt_enable_acrylic();
     }
 
     if (cchwritten == length)
@@ -7690,6 +7694,7 @@ vtp_init(void)
 {
     HMODULE hKerneldll;
     DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+    int i;
 # ifdef FEAT_TERMGUICOLORS
     COLORREF fg, bg;
 # endif
@@ -7712,10 +7717,10 @@ vtp_init(void)
     csbi.cbSize = sizeof(csbi);
     if (has_csbiex)
 	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
-    save_console_bg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_bg];
-    save_console_fg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_fg];
-    store_console_bg_rgb = save_console_bg_rgb;
-    store_console_fg_rgb = save_console_fg_rgb;
+    store_console_bg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_bg];
+    store_console_fg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_fg];
+    for (i = 0; i < 16; ++i)
+	save_console_rgb[i] = (guicolor_T)csbi.ColorTable[i];
 
 # ifdef FEAT_TERMGUICOLORS
     bg = (COLORREF)csbi.ColorTable[g_color_index_bg];
@@ -7749,6 +7754,8 @@ vtp_printf(
     len = vim_vsnprintf((char *)buf, 100, (char *)format, list);
     va_end(list);
     WriteConsoleA(g_hConOut, buf, (DWORD)len, &result, NULL);
+    if (USE_WT)
+	wt_enable_acrylic();
     return (int)result;
 }
 
@@ -7903,6 +7910,8 @@ vtp_sgr_bulks(
 	*p-- = '[';
 	*p = '\033';
 	WriteConsoleA(g_hConOut, p, (DWORD)(&buf[SGRBUFSIZE] - p), &r, NULL);
+	if (USE_WT)
+	    wt_enable_acrylic();
     default:
 	break;
     }
@@ -7912,6 +7921,18 @@ vtp_sgr_bulks(
 wt_init(void)
 {
     wt_working = (mch_getenv("WT_SESSION") != NULL);
+    wt_acrylic = (wt_working) ? 0xFF000000 : 0;
+    if (USE_WT)
+    {
+	int i;
+
+	for (i = 0; i < 16; ++i)
+	    wt_colortable_rgb(i,
+		    GetRValue(save_console_rgb[i]),
+		    GetGValue(save_console_rgb[i]),
+		    GetBValue(save_console_rgb[i]),
+		    0);
+    }
 }
 
     int
@@ -7932,6 +7953,47 @@ ctermtoxterm(
 }
 # endif
 
+    void
+wt_colortable_rgb(
+    int idx, // -1 = use fg/bg
+    int r,
+    int g,
+    int b,
+    int fg) // TRUE = fg, FALSE = bg
+{
+# ifdef FEAT_TERMGUICOLORS
+    DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+    int nidx;
+
+    if (USE_WT && has_csbiex)
+    {
+	csbi.cbSize = sizeof(csbi);
+	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+
+	csbi.cbSize = sizeof(csbi);
+	csbi.srWindow.Right += 1;
+	csbi.srWindow.Bottom += 1;
+
+	nidx = (idx != -1) ? idx : (csbi.wAttributes >> ((!fg) ? 4 : 0)) & 0xf;
+	csbi.ColorTable[nidx] = (b << 16) | (g << 8) | r;
+	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	if (USE_WT)
+	    wt_enable_acrylic();
+    }
+# endif
+}
+
+    void
+wt_colortable_cterm(
+    int cterm,
+    int fg) // TRUE = fg, FALSE = bg
+{
+    char_u r, g, b, idx;
+
+    cterm_color2rgb(cterm, &r, &g, &b, &idx);
+    wt_colortable_rgb(-1, r, g, b, fg);
+}
+
     static void
 set_console_color_rgb(void)
 {
@@ -7945,13 +8007,6 @@ set_console_color_rgb(void)
 
     get_default_console_color(&ctermfg, &ctermbg, &fg, &bg);
 
-    if (USE_WT)
-    {
-	term_fg_rgb_color(fg);
-	term_bg_rgb_color(bg);
-	return;
-    }
-
     fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
     bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
 
@@ -7962,12 +8017,18 @@ set_console_color_rgb(void)
     csbi.cbSize = sizeof(csbi);
     csbi.srWindow.Right += 1;
     csbi.srWindow.Bottom += 1;
-    store_console_bg_rgb = csbi.ColorTable[g_color_index_bg];
-    store_console_fg_rgb = csbi.ColorTable[g_color_index_fg];
-    csbi.ColorTable[g_color_index_bg] = (COLORREF)bg;
-    csbi.ColorTable[g_color_index_fg] = (COLORREF)fg;
+    store_console_bg_attr = (!USE_WT) ? g_color_index_bg
+				               : (csbi.wAttributes >> 4) & 0xf;
+    store_console_fg_attr = (!USE_WT) ? g_color_index_fg
+						      : csbi.wAttributes & 0xf;
+    store_console_bg_rgb = csbi.ColorTable[store_console_bg_attr];
+    store_console_fg_rgb = csbi.ColorTable[store_console_fg_attr];
+    csbi.ColorTable[store_console_bg_attr] = (COLORREF)bg;
+    csbi.ColorTable[store_console_fg_attr] = (COLORREF)fg;
     if (has_csbiex)
 	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    if (USE_WT)
+	wt_enable_acrylic();
 # endif
 }
 
@@ -8025,9 +8086,6 @@ reset_console_color_rgb(void)
 # ifdef FEAT_TERMGUICOLORS
     DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
 
-    if (USE_WT)
-	return;
-
     csbi.cbSize = sizeof(csbi);
     if (has_csbiex)
 	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
@@ -8035,10 +8093,12 @@ reset_console_color_rgb(void)
     csbi.cbSize = sizeof(csbi);
     csbi.srWindow.Right += 1;
     csbi.srWindow.Bottom += 1;
-    csbi.ColorTable[g_color_index_bg] = (COLORREF)store_console_bg_rgb;
-    csbi.ColorTable[g_color_index_fg] = (COLORREF)store_console_fg_rgb;
+    csbi.ColorTable[store_console_bg_attr] = (COLORREF)store_console_bg_rgb;
+    csbi.ColorTable[store_console_fg_attr] = (COLORREF)store_console_fg_rgb;
     if (has_csbiex)
 	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    if (USE_WT)
+	wt_enable_acrylic();
 # endif
 }
 
@@ -8050,6 +8110,7 @@ restore_console_color_rgb(void)
 {
 # ifdef FEAT_TERMGUICOLORS
     DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+    int i;
 
     csbi.cbSize = sizeof(csbi);
     if (has_csbiex)
@@ -8058,8 +8119,8 @@ restore_console_color_rgb(void)
     csbi.cbSize = sizeof(csbi);
     csbi.srWindow.Right += 1;
     csbi.srWindow.Bottom += 1;
-    csbi.ColorTable[g_color_index_bg] = (COLORREF)save_console_bg_rgb;
-    csbi.ColorTable[g_color_index_fg] = (COLORREF)save_console_fg_rgb;
+    for (i = 0; i < 16; ++i)
+	csbi.ColorTable[i] = (COLORREF)save_console_rgb[i];
     if (has_csbiex)
 	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 # endif
@@ -8072,6 +8133,46 @@ control_console_color_rgb(void)
 	set_console_color_rgb();
     else
 	reset_console_color_rgb();
+}
+
+    void
+wt_enable_acrylic(void)
+{
+    DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+
+    if (has_csbiex)
+    {
+	int i;
+
+	csbi.cbSize = sizeof(csbi);
+	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	{
+	    int i;
+	    FILE *fp = fopen("log", "a");
+	    for (i = 0; i < 16; ++i)
+		fprintf(fp, "%08lX ", (DWORD)csbi.ColorTable[i]);
+	    fprintf(fp, "\n");
+	    fclose(fp);
+	}
+
+        csbi.cbSize = sizeof(csbi);
+	csbi.srWindow.Right += 1;
+	csbi.srWindow.Bottom += 1;
+	for (i = 0; i < 16; ++i)
+	    csbi.ColorTable[i] |= 0xFFFFFFFF;
+	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+
+	csbi.cbSize = sizeof(csbi);
+	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	{
+	    int i;
+	    FILE *fp = fopen("log", "a");
+	    for (i = 0; i < 16; ++i)
+		fprintf(fp, "%08lX ", (DWORD)csbi.ColorTable[i]);
+	    fprintf(fp, "\n\n");
+	    fclose(fp);
+	}
+    }
 }
 
     int
