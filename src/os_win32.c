@@ -55,6 +55,13 @@
 # include <tlhelp32.h>
 #endif
 
+#if 0
+#if defined(FEAT_VTP) && defined(_MSC_VER)
+# include <imagehlp.h>
+# pragma comment(lib, "imagehlp.lib")
+#endif
+#endif
+
 #ifdef __MINGW32__
 # ifndef FROM_LEFT_1ST_BUTTON_PRESSED
 #  define FROM_LEFT_1ST_BUTTON_PRESSED    0x0001
@@ -201,6 +208,7 @@ static void vtp_sgr_bulks(int argc, int *argv);
 
 static int wt_working = 0;
 static void wt_init();
+static void wt_enable_acrylic();
 
 static guicolor_T save_console_bg_rgb;
 static guicolor_T save_console_fg_rgb;
@@ -6425,6 +6433,27 @@ mch_write(
 	return;
     }
 
+#if 0
+    {
+	char_u *p;
+	char buf[50];
+	FILE *fp = fopen("log", "a+");
+
+	p = s;
+	while (*p)
+	{
+	    if (*p < 0x20)
+		sprintf(buf, "(%02x)", *p);
+	    else
+		sprintf(buf, "%c", *p);
+	    fprintf(fp, "%s", buf);
+	    p++;
+	}
+
+	fclose(fp);
+    }
+#endif
+
     // translate ESC | sequences into faked bios calls
     while (len--)
     {
@@ -6593,6 +6622,11 @@ notsgr:
 		    }
 		    else if (USE_VTP)
 			vtp_sgr_bulks(argc, args);
+		}
+		else if (*p == 'W')
+		{
+		    if (argc == 1 && args[0] == 0)
+			wt_enable_acrylic();
 		}
 		else if (argc == 2 && *p == 'H')
 		{
@@ -7897,6 +7931,70 @@ vtp_init(void)
 	    has_csbiex = TRUE;
     }
 
+    {
+	HWND parent = GetParent(GetConsoleWindow());
+    }
+
+//    hKerneldll = GetModuleHandle("api-ms-win-core-console-l2-1-0.dll");
+#if 0
+    {
+	ULONG size;
+	intptr_t inst = (intptr_t)GetModuleHandle("kernel32.dll");
+	PIMAGE_IMPORT_DESCRIPTOR pid =
+	    (PIMAGE_IMPORT_DESCRIPTOR)ImageDirectoryEntryToData(
+		(HMODULE)inst, TRUE,
+		IMAGE_DIRECTORY_ENTRY_IMPORT, &size);
+	
+	for (; pid->Name; ++pid)
+	{
+	    PIMAGE_THUNK_DATA pitdft =
+		    (PIMAGE_THUNK_DATA)(inst + pid->FirstThunk);
+	    PIMAGE_THUNK_DATA pitdoft =
+		    (PIMAGE_THUNK_DATA)(inst + pid->OriginalFirstThunk);
+
+	    for (; pitdft->u1.Function; ++pitdft, ++pitdoft)
+	    {
+		PIMAGE_IMPORT_BY_NAME pibn =
+		    (PIMAGE_IMPORT_BY_NAME)(inst + pitdft->u1.AddressOfData);
+
+		if (IMAGE_SNAP_BY_ORDINAL(pitdft->u1.Ordinal))
+		    continue;
+#if 0
+		{
+		    FILE *fp = fopen("log", "a+");
+		    fprintf(fp, "Mod:%s Hint:%d Name:%s\n", (char *)(inst + pid->Name), pibn->Hint, pibn->Name);
+		    fclose(fp);
+		}
+#endif
+		if (!STRICMP(pibn->Name, "GetConsoleScreenBufferInfoEx"))
+		{
+		    HMODULE lib = LoadLibrary((char *)(inst + pid->Name));
+#if 0
+		    pGetConsoleScreenBufferInfoEx =
+		      (PfnGetConsoleScreenBufferInfoEx)pitdft->u1.Function;
+#endif
+		    pGetConsoleScreenBufferInfoEx =
+			(PfnGetConsoleScreenBufferInfoEx)GetProcAddress(
+			lib, pibn->Name);
+		    MessageBox(NULL, "GET", NULL, MB_OK);
+		}
+		if (!STRICMP(pibn->Name, "SetConsoleScreenBufferInfoEx"))
+		{
+		    HMODULE lib = LoadLibrary((char *)(inst + pid->Name));
+#if 0
+		    pSetConsoleScreenBufferInfoEx =
+		      (PfnSetConsoleScreenBufferInfoEx)pitdft->u1.Function;
+#endif
+		    pSetConsoleScreenBufferInfoEx =
+			(PfnGetConsoleScreenBufferInfoEx)GetProcAddress(
+			lib, pibn->Name);
+		    MessageBox(NULL, "SET", NULL, MB_OK);
+		}
+	    }
+	}
+    }
+#endif
+
     csbi.cbSize = sizeof(csbi);
     if (has_csbiex)
 	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
@@ -8102,6 +8200,25 @@ wt_init(void)
     wt_working = (mch_getenv("WT_SESSION") != NULL);
 }
 
+    static void
+wt_enable_acrylic(void)
+{
+    DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+
+    if (USE_WT && has_csbiex)
+    {
+	csbi.cbSize = sizeof(csbi);
+	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+
+	csbi.cbSize = sizeof(csbi);
+	csbi.srWindow.Right += 1;
+	csbi.srWindow.Bottom += 1;
+	csbi.ColorTable[g_color_index_bg] |= 0xFF000000;
+	csbi.ColorTable[g_color_index_fg] |= 0xFF000000;
+	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    }
+}
+
     int
 use_wt(void)
 {
@@ -8135,8 +8252,33 @@ set_console_color_rgb(void)
 
     if (USE_WT)
     {
-	term_fg_rgb_color(fg);
-	term_bg_rgb_color(bg);
+	char buf[100];
+
+	out_flush();
+
+	vim_snprintf(buf, 100, (char *)T_8F,
+			       (fg >> 16) & 0xff, (fg >> 8) & 0xff, fg & 0xff);
+	buf[1] = '[';
+	vtp_printf(buf);
+
+	vim_snprintf(buf, 100, (char *)T_8B,
+			       (bg >> 16) & 0xff, (bg >> 8) & 0xff, bg & 0xff);
+	buf[1] = '[';
+	vtp_printf(buf);
+
+	csbi.cbSize = sizeof(csbi);
+	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	csbi.cbSize = sizeof(csbi);
+	csbi.srWindow.Right += 1;
+	csbi.srWindow.Bottom += 1;
+	{
+	    int i;
+
+	    for (i = 0; i < 16; ++i)
+		csbi.ColorTable[i] = 0x404000;
+	}
+	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+
 	return;
     }
 
