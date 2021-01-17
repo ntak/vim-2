@@ -27,6 +27,8 @@ if &cp || exists("g:loaded_netrw")
   finish
 endif
 
+let g:netrw_quiet = 1
+
 " Check that vim has patches that netrw requires.
 " Patches needed for v7.4: 1557, and 213.
 " (netrw will benefit from vim's having patch#656, too)
@@ -242,7 +244,7 @@ if !exists("g:netrw_file_cmd")
  endif
 endif
 if !exists("g:netrw_ftp_cmd")
-  let g:netrw_ftp_cmd	= "ftp"
+  let g:netrw_ftp_cmd   = 'ftp -s:' . $VIM . '\vimfiles\ftpidpass\MACHINE'
 endif
 let s:netrw_ftp_cmd= g:netrw_ftp_cmd
 if !exists("g:netrw_ftp_options")
@@ -339,7 +341,7 @@ call s:NetrwInit("g:netrw_decompress"       , '{ ".gz" : "gunzip", ".bz2" : "bun
 call s:NetrwInit("g:netrw_dirhistmax"       , 10)
 call s:NetrwInit("g:netrw_errorlvl"  , s:NOTE)
 call s:NetrwInit("g:netrw_fastbrowse"       , 1)
-call s:NetrwInit("g:netrw_ftp_browse_reject", '^total\s\+\d\+$\|^Trying\s\+\d\+.*$\|^KERBEROS_V\d rejected\|^Security extensions not\|No such file\|: connect to address [0-9a-fA-F:]*: No route to host$')
+call s:NetrwInit("g:netrw_ftp_browse_reject", '^$\|(none)\|OPTS UTF8')
 if !exists("g:netrw_ftp_list_cmd")
  if has("unix") || (exists("g:netrw_cygwin") && g:netrw_cygwin)
   let g:netrw_ftp_list_cmd     = "ls -lF"
