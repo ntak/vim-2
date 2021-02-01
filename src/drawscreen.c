@@ -86,6 +86,7 @@ update_screen(int type_arg)
     int		type = type_arg;
     win_T	*wp;
     static int	did_intro = FALSE;
+    static int	in_intro = FALSE;
 #ifdef FEAT_GUI
     int		did_one = FALSE;
     int		did_undraw = FALSE;
@@ -284,6 +285,10 @@ update_screen(int type_arg)
 #ifdef FEAT_SEARCH_EXTRA
     screen_search_hl.rm.regprog = NULL;
 #endif
+
+    if (!did_intro)
+	win_update(firstwin);
+
     FOR_ALL_WINDOWS(wp)
     {
 	if (wp->w_redr_type != 0)
@@ -307,7 +312,14 @@ update_screen(int type_arg)
 	    }
 #endif
 
-	    win_update(wp);
+	    if (!in_intro)
+		win_update(wp);
+	    else if (!BUFEMPTY() || curbuf->b_fname != NULL
+						    || firstwin->w_next != NULL)
+	    {
+		win_update(wp);
+		in_intro = FALSE;
+	    }
 	}
 
 	// redraw status line after the window to minimize cursor movement
@@ -345,7 +357,10 @@ update_screen(int type_arg)
 
     // May put up an introductory message when not editing a file
     if (!did_intro)
+    {
 	maybe_intro_message();
+	in_intro = TRUE;
+    }
     did_intro = TRUE;
 
 #ifdef FEAT_GUI
