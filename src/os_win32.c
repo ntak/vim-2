@@ -2883,8 +2883,8 @@ mch_init_c(void)
 # endif
 
     vtp_flag_init();
-    vtp_init();
     wt_init();
+    vtp_init();
 }
 
 /*
@@ -7930,6 +7930,21 @@ vtp_init(void)
 		&& pSetConsoleScreenBufferInfoEx != NULL)
 	    has_csbiex = TRUE;
     }
+
+
+// WT performs a thunk hook in the PE placement process and guides it to own
+// process.  It is necessary to call the address of the original processing,
+// which is the only means for background transparency.
+#ifdef _APISETCONSOLEL2_
+    if (wt_working)
+    {
+	pGetConsoleScreenBufferInfoEx =
+		(PfnGetConsoleScreenBufferInfoEx)GetConsoleScreenBufferInfoEx;
+	pSetConsoleScreenBufferInfoEx =
+		(PfnSetConsoleScreenBufferInfoEx)SetConsoleScreenBufferInfoEx;
+	has_csbiex = TRUE;
+    }
+#endif
 
     {
 	HWND parent = GetParent(GetConsoleWindow());
