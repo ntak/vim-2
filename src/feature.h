@@ -1263,3 +1263,10 @@
 #if (!defined(FEAT_GUI) || defined(VIMDLL)) && defined(MSWIN)
 # define FEAT_VTP
 #endif
+
+/*
+ * +acrylic: Windows Terminal undocumented feature, transparent background.
+ */
+#ifdef _APISETCONSOLEL2_
+# define FEAT_WT_ACRYLIC
+#endif

@@ -2956,12 +2956,14 @@ term_color(char_u *s, int n)
 				 : (n >= 16 ? "48;5;" : "10");
 
 	sprintf(buf, format, lead, tail);
-	//OUT_STR(tgoto(buf, 0, n >= 16 ? n : n - 8));
+	OUT_STR(tgoto(buf, 0, n >= 16 ? n : n - 8));
     }
     else
-	//OUT_STR(tgoto((char *)s, 0, n));
+	OUT_STR(tgoto((char *)s, 0, n));
+
 #ifdef FEAT_VTP
-    OUT_STR((char_u *)"\033|0W");
+    if (use_wt())
+	OUT_STR((char_u *)"\033|0W");
 #endif
 }
 
@@ -3041,8 +3043,10 @@ term_rgb_color(char_u *s, guicolor_T rgb)
     vim_snprintf(buf, MAX_COLOR_STR_LEN,
 				  (char *)s, RED(rgb), GREEN(rgb), BLUE(rgb));
     OUT_STR(buf);
+
 #ifdef FEAT_VTP
-    OUT_STR((char_u *)"\033|0W");
+    if (use_wt())
+	OUT_STR((char_u *)"\033|0W");
 #endif
 }
 

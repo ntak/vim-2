@@ -55,13 +55,6 @@
 # include <tlhelp32.h>
 #endif
 
-#if 0
-#if defined(FEAT_VTP) && defined(_MSC_VER)
-# include <imagehlp.h>
-# pragma comment(lib, "imagehlp.lib")
-#endif
-#endif
-
 #ifdef __MINGW32__
 # ifndef FROM_LEFT_1ST_BUTTON_PRESSED
 #  define FROM_LEFT_1ST_BUTTON_PRESSED    0x0001
@@ -77,6 +70,10 @@
 # endif
 # ifndef FROM_LEFT_4TH_BUTTON_PRESSED
 #  define FROM_LEFT_4TH_BUTTON_PRESSED    0x0010
+# endif
+
+# ifdef _APISETCONSOLEL2_
+#  define FEAT_WT_ACRYLIC
 # endif
 
 /*
@@ -208,12 +205,13 @@ static void vtp_sgr_bulks(int argc, int *argv);
 
 static int wt_working = 0;
 static void wt_init();
-static void wt_enable_acrylic();
+static void wt_restore_acrylic();
 
 static guicolor_T save_console_bg_rgb;
 static guicolor_T save_console_fg_rgb;
 static guicolor_T store_console_bg_rgb;
 static guicolor_T store_console_fg_rgb;
+static COLORREF startup_colortable[16];
 
 static int g_color_index_bg = 0;
 static int g_color_index_fg = 7;
@@ -257,6 +255,7 @@ static BOOL win8_or_later = FALSE;
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
 // Dynamic loading for portability
+# ifndef FEAT_WT_ACRYLIC
 typedef struct _DYN_CONSOLE_SCREEN_BUFFER_INFOEX
 {
     ULONG cbSize;
@@ -269,11 +268,11 @@ typedef struct _DYN_CONSOLE_SCREEN_BUFFER_INFOEX
     BOOL bFullscreenSupported;
     COLORREF ColorTable[16];
 } DYN_CONSOLE_SCREEN_BUFFER_INFOEX, *PDYN_CONSOLE_SCREEN_BUFFER_INFOEX;
+# endif
 typedef BOOL (WINAPI *PfnGetConsoleScreenBufferInfoEx)(HANDLE, PDYN_CONSOLE_SCREEN_BUFFER_INFOEX);
-static PfnGetConsoleScreenBufferInfoEx pGetConsoleScreenBufferInfoEx;
+static PfnGetConsoleScreenBufferInfoEx pGetConsoleScreenBufferInfoEx = NULL;
 typedef BOOL (WINAPI *PfnSetConsoleScreenBufferInfoEx)(HANDLE, PDYN_CONSOLE_SCREEN_BUFFER_INFOEX);
-static PfnSetConsoleScreenBufferInfoEx pSetConsoleScreenBufferInfoEx;
-static BOOL has_csbiex = FALSE;
+static PfnSetConsoleScreenBufferInfoEx pSetConsoleScreenBufferInfoEx = NULL;
 #endif
 
 /*
@@ -6433,27 +6432,6 @@ mch_write(
 	return;
     }
 
-#if 0
-    {
-	char_u *p;
-	char buf[50];
-	FILE *fp = fopen("log", "a+");
-
-	p = s;
-	while (*p)
-	{
-	    if (*p < 0x20)
-		sprintf(buf, "(%02x)", *p);
-	    else
-		sprintf(buf, "%c", *p);
-	    fprintf(fp, "%s", buf);
-	    p++;
-	}
-
-	fclose(fp);
-    }
-#endif
-
     // translate ESC | sequences into faked bios calls
     while (len--)
     {
@@ -6626,7 +6604,7 @@ notsgr:
 		else if (*p == 'W')
 		{
 		    if (argc == 1 && args[0] == 0)
-			wt_enable_acrylic();
+			wt_restore_acrylic();
 		}
 		else if (argc == 2 && *p == 'H')
 		{
@@ -7907,6 +7885,40 @@ vtp_flag_init(void)
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL) || defined(PROTO)
 
+    static BOOL
+GetConsoleScreenBufferInfoExNop(
+    HANDLE handle,
+    PDYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi)
+{
+    return TRUE;
+}
+
+    static BOOL
+SetConsoleScreenBufferInfoExNop(
+    HANDLE handle,
+    PDYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi)
+{
+    return TRUE;
+}
+
+    static BOOL
+GetConsoleScreenBufferInfoExThunk(
+    HANDLE handle,
+    PDYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi)
+{
+    return GetConsoleScreenBufferInfoEx(handle,
+	                                  (PCONSOLE_SCREEN_BUFFER_INFOEX)csbi);
+}
+
+    static BOOL
+SetConsoleScreenBufferInfoExThunk(
+    HANDLE handle,
+    PDYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi)
+{
+    return SetConsoleScreenBufferInfoEx(handle,
+	                                  (PCONSOLE_SCREEN_BUFFER_INFOEX)csbi);
+}
+
     static void
 vtp_init(void)
 {
@@ -7915,6 +7927,7 @@ vtp_init(void)
 # ifdef FEAT_TERMGUICOLORS
     COLORREF fg, bg;
 # endif
+    int i;
 
     // Use functions supported from Vista
     hKerneldll = GetModuleHandle("kernel32.dll");
@@ -7926,97 +7939,37 @@ vtp_init(void)
 	pSetConsoleScreenBufferInfoEx =
 		(PfnSetConsoleScreenBufferInfoEx)GetProcAddress(
 		hKerneldll, "SetConsoleScreenBufferInfoEx");
-	if (pGetConsoleScreenBufferInfoEx != NULL
-		&& pSetConsoleScreenBufferInfoEx != NULL)
-	    has_csbiex = TRUE;
     }
-
 
 // WT performs a thunk hook in the PE placement process and guides it to own
 // process.  It is necessary to call the address of the original processing,
 // which is the only means for background transparency.
-#ifdef _APISETCONSOLEL2_
-    if (wt_working)
+# ifdef FEAT_WT_ACRYLIC
+    if (USE_WT)
     {
 	pGetConsoleScreenBufferInfoEx =
-		(PfnGetConsoleScreenBufferInfoEx)GetConsoleScreenBufferInfoEx;
+	    (PfnGetConsoleScreenBufferInfoEx)GetConsoleScreenBufferInfoExThunk;
 	pSetConsoleScreenBufferInfoEx =
-		(PfnSetConsoleScreenBufferInfoEx)SetConsoleScreenBufferInfoEx;
-	has_csbiex = TRUE;
+	    (PfnSetConsoleScreenBufferInfoEx)SetConsoleScreenBufferInfoExThunk;
     }
-#endif
+# endif
 
-    {
-	HWND parent = GetParent(GetConsoleWindow());
-    }
-
-//    hKerneldll = GetModuleHandle("api-ms-win-core-console-l2-1-0.dll");
-#if 0
-    {
-	ULONG size;
-	intptr_t inst = (intptr_t)GetModuleHandle("kernel32.dll");
-	PIMAGE_IMPORT_DESCRIPTOR pid =
-	    (PIMAGE_IMPORT_DESCRIPTOR)ImageDirectoryEntryToData(
-		(HMODULE)inst, TRUE,
-		IMAGE_DIRECTORY_ENTRY_IMPORT, &size);
-	
-	for (; pid->Name; ++pid)
-	{
-	    PIMAGE_THUNK_DATA pitdft =
-		    (PIMAGE_THUNK_DATA)(inst + pid->FirstThunk);
-	    PIMAGE_THUNK_DATA pitdoft =
-		    (PIMAGE_THUNK_DATA)(inst + pid->OriginalFirstThunk);
-
-	    for (; pitdft->u1.Function; ++pitdft, ++pitdoft)
-	    {
-		PIMAGE_IMPORT_BY_NAME pibn =
-		    (PIMAGE_IMPORT_BY_NAME)(inst + pitdft->u1.AddressOfData);
-
-		if (IMAGE_SNAP_BY_ORDINAL(pitdft->u1.Ordinal))
-		    continue;
-#if 0
-		{
-		    FILE *fp = fopen("log", "a+");
-		    fprintf(fp, "Mod:%s Hint:%d Name:%s\n", (char *)(inst + pid->Name), pibn->Hint, pibn->Name);
-		    fclose(fp);
-		}
-#endif
-		if (!STRICMP(pibn->Name, "GetConsoleScreenBufferInfoEx"))
-		{
-		    HMODULE lib = LoadLibrary((char *)(inst + pid->Name));
-#if 0
-		    pGetConsoleScreenBufferInfoEx =
-		      (PfnGetConsoleScreenBufferInfoEx)pitdft->u1.Function;
-#endif
-		    pGetConsoleScreenBufferInfoEx =
-			(PfnGetConsoleScreenBufferInfoEx)GetProcAddress(
-			lib, pibn->Name);
-		    MessageBox(NULL, "GET", NULL, MB_OK);
-		}
-		if (!STRICMP(pibn->Name, "SetConsoleScreenBufferInfoEx"))
-		{
-		    HMODULE lib = LoadLibrary((char *)(inst + pid->Name));
-#if 0
-		    pSetConsoleScreenBufferInfoEx =
-		      (PfnSetConsoleScreenBufferInfoEx)pitdft->u1.Function;
-#endif
-		    pSetConsoleScreenBufferInfoEx =
-			(PfnGetConsoleScreenBufferInfoEx)GetProcAddress(
-			lib, pibn->Name);
-		    MessageBox(NULL, "SET", NULL, MB_OK);
-		}
-	    }
-	}
-    }
-#endif
+    if (pGetConsoleScreenBufferInfoEx == NULL)
+	pGetConsoleScreenBufferInfoEx =
+	      (PfnGetConsoleScreenBufferInfoEx)GetConsoleScreenBufferInfoExNop;
+    if (pSetConsoleScreenBufferInfoEx == NULL)
+	pSetConsoleScreenBufferInfoEx =
+	      (PfnSetConsoleScreenBufferInfoEx)SetConsoleScreenBufferInfoExNop;
 
     csbi.cbSize = sizeof(csbi);
-    if (has_csbiex)
-	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
     save_console_bg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_bg];
     save_console_fg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_fg];
     store_console_bg_rgb = save_console_bg_rgb;
     store_console_fg_rgb = save_console_fg_rgb;
+
+    for (i = 0; i < 16; ++i)
+	startup_colortable[i] = csbi.ColorTable[i];
 
 # ifdef FEAT_TERMGUICOLORS
     bg = (COLORREF)csbi.ColorTable[g_color_index_bg];
@@ -8216,21 +8169,24 @@ wt_init(void)
 }
 
     static void
-wt_enable_acrylic(void)
+wt_restore_acrylic(void)
 {
-    DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
-
-    if (USE_WT && has_csbiex)
+    if (USE_WT)
     {
+	DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+	int i;
+
 	csbi.cbSize = sizeof(csbi);
 	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
 	csbi.cbSize = sizeof(csbi);
 	csbi.srWindow.Right += 1;
 	csbi.srWindow.Bottom += 1;
-	csbi.ColorTable[g_color_index_bg] |= 0xFF000000;
-	csbi.ColorTable[g_color_index_fg] |= 0xFF000000;
-	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	for (i = 0; i < 16; ++i)
+	    csbi.ColorTable[i] = 
+		    (startup_colortable[i] & 0xFF000000)
+		  | (csbi.ColorTable[i] & 0x00FFFFFF);
+	//pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
     }
 }
 
@@ -8262,47 +8218,16 @@ set_console_color_rgb(void)
 
     if (!USE_VTP)
 	return;
+    if (USE_WT)
+	return;
 
     get_default_console_color(&ctermfg, &ctermbg, &fg, &bg);
-
-    if (USE_WT)
-    {
-	char buf[100];
-
-	out_flush();
-
-	vim_snprintf(buf, 100, (char *)T_8F,
-			       (fg >> 16) & 0xff, (fg >> 8) & 0xff, fg & 0xff);
-	buf[1] = '[';
-	vtp_printf(buf);
-
-	vim_snprintf(buf, 100, (char *)T_8B,
-			       (bg >> 16) & 0xff, (bg >> 8) & 0xff, bg & 0xff);
-	buf[1] = '[';
-	vtp_printf(buf);
-
-	csbi.cbSize = sizeof(csbi);
-	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
-	csbi.cbSize = sizeof(csbi);
-	csbi.srWindow.Right += 1;
-	csbi.srWindow.Bottom += 1;
-	{
-	    int i;
-
-	    for (i = 0; i < 16; ++i)
-		csbi.ColorTable[i] = 0x404000;
-	}
-	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
-
-	return;
-    }
 
     fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
     bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
 
     csbi.cbSize = sizeof(csbi);
-    if (has_csbiex)
-	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
     csbi.cbSize = sizeof(csbi);
     csbi.srWindow.Right += 1;
@@ -8311,8 +8236,8 @@ set_console_color_rgb(void)
     store_console_fg_rgb = csbi.ColorTable[g_color_index_fg];
     csbi.ColorTable[g_color_index_bg] = (COLORREF)bg;
     csbi.ColorTable[g_color_index_fg] = (COLORREF)fg;
-    if (has_csbiex)
-	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    wt_restore_acrylic();
 # endif
 }
 
@@ -8374,16 +8299,15 @@ reset_console_color_rgb(void)
 	return;
 
     csbi.cbSize = sizeof(csbi);
-    if (has_csbiex)
-	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
     csbi.cbSize = sizeof(csbi);
     csbi.srWindow.Right += 1;
     csbi.srWindow.Bottom += 1;
     csbi.ColorTable[g_color_index_bg] = (COLORREF)store_console_bg_rgb;
     csbi.ColorTable[g_color_index_fg] = (COLORREF)store_console_fg_rgb;
-    if (has_csbiex)
-	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    wt_restore_acrylic();
 # endif
 }
 
@@ -8395,18 +8319,20 @@ restore_console_color_rgb(void)
 {
 # ifdef FEAT_TERMGUICOLORS
     DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+    int i;
+
+    if (USE_WT)
+	return;
 
     csbi.cbSize = sizeof(csbi);
-    if (has_csbiex)
-	pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
     csbi.cbSize = sizeof(csbi);
     csbi.srWindow.Right += 1;
     csbi.srWindow.Bottom += 1;
-    csbi.ColorTable[g_color_index_bg] = (COLORREF)save_console_bg_rgb;
-    csbi.ColorTable[g_color_index_fg] = (COLORREF)save_console_fg_rgb;
-    if (has_csbiex)
-	pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    for (i = 0; i < 16; ++i)
+	csbi.ColorTable[i] = startup_colortable[i];
+    pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 # endif
 }
 
