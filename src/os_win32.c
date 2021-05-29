@@ -205,6 +205,7 @@ static void vtp_sgr_bulks(int argc, int *argv);
 
 static int wt_working = 0;
 static void wt_init();
+static void wt_print_console_color_rgb(int fgbg_code, COLORREF rgb);
 static void wt_restore_acrylic();
 
 static guicolor_T save_console_bg_rgb;
@@ -232,6 +233,8 @@ static int default_console_color_fg = 0xc0c0c0; // white
 static void set_console_color_rgb(void);
 static void reset_console_color_rgb(void);
 static void restore_console_color_rgb(void);
+static void print_console_color_rgb_fg(COLORREF rgb);
+static void print_console_color_rgb_bg(COLORREF rgb);
 #endif
 
 // This flag is newly created from Windows 10
@@ -7903,6 +7906,7 @@ SetConsoleScreenBufferInfoExNop(
     return TRUE;
 }
 
+# ifdef FEAT_WT_ACRYLIC
     static BOOL
 GetConsoleScreenBufferInfoExThunk(
     HANDLE handle,
@@ -7920,6 +7924,7 @@ SetConsoleScreenBufferInfoExThunk(
     return SetConsoleScreenBufferInfoEx(handle,
 	                                  (PCONSOLE_SCREEN_BUFFER_INFOEX)csbi);
 }
+# endif
 
     static void
 vtp_init(void)
@@ -8167,7 +8172,25 @@ vtp_sgr_bulks(
     static void
 wt_init(void)
 {
-    wt_working = (mch_getenv("WT_SESSION") != NULL);
+    wt_working = (mch_getenv("WT_SESSION") != NULL) | 1;
+}
+
+    static void
+wt_print_console_color_rgb(
+    int fgbg_code,
+    COLORREF rgb)
+{
+    if (USE_WT)
+    {
+	int argv[5];
+
+	argv[0] = fgbg_code;
+	argv[1] = 2;
+	argv[2] = GetRValue(rgb);
+	argv[3] = GetGValue(rgb);
+	argv[4] = GetBValue(rgb);
+	vtp_sgr_bulks(5, argv);
+    }
 }
 
     static void
@@ -8186,7 +8209,7 @@ wt_restore_acrylic(void)
 	csbi.srWindow.Bottom += 1;
 	for (i = 0; i < 16; ++i)
 	    csbi.ColorTable[i] = 
-		    (startup_colortable[i] & 0xFF000000)
+		    (startup_colortable[i] & 0x00000000)
 		  | (csbi.ColorTable[i] & 0x00FFFFFF);
 	//pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
     }
@@ -8220,8 +8243,6 @@ set_console_color_rgb(void)
 
     if (!USE_VTP)
 	return;
-    if (USE_WT)
-	return;
 
     get_default_console_color(&ctermfg, &ctermbg, &fg, &bg);
 
@@ -8238,7 +8259,9 @@ set_console_color_rgb(void)
     store_console_fg_rgb = csbi.ColorTable[g_color_index_fg];
     csbi.ColorTable[g_color_index_bg] = (COLORREF)bg;
     csbi.ColorTable[g_color_index_fg] = (COLORREF)fg;
-    pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    //pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    wt_print_console_color_rgb(38, (COLORREF)fg);
+    wt_print_console_color_rgb(48, (COLORREF)bg);
     wt_restore_acrylic();
 # endif
 }
@@ -8297,9 +8320,6 @@ reset_console_color_rgb(void)
 # ifdef FEAT_TERMGUICOLORS
     DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
 
-    if (USE_WT)
-	return;
-
     csbi.cbSize = sizeof(csbi);
     pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
@@ -8308,7 +8328,9 @@ reset_console_color_rgb(void)
     csbi.srWindow.Bottom += 1;
     csbi.ColorTable[g_color_index_bg] = (COLORREF)store_console_bg_rgb;
     csbi.ColorTable[g_color_index_fg] = (COLORREF)store_console_fg_rgb;
-    pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    //pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    wt_print_console_color_rgb(38, (COLORREF)store_console_fg_rgb);
+    wt_print_console_color_rgb(48, (COLORREF)store_console_bg_rgb);
     wt_restore_acrylic();
 # endif
 }
@@ -8323,9 +8345,6 @@ restore_console_color_rgb(void)
     DYN_CONSOLE_SCREEN_BUFFER_INFOEX csbi;
     int i;
 
-    if (USE_WT)
-	return;
-
     csbi.cbSize = sizeof(csbi);
     pGetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
@@ -8335,6 +8354,18 @@ restore_console_color_rgb(void)
     for (i = 0; i < 16; ++i)
 	csbi.ColorTable[i] = startup_colortable[i];
     pSetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+# endif
+}
+
+    static void
+print_console_color_rgb(
+    int fgbg_code,
+    COLORREF rgb)
+{
+# ifdef FEAT_TERMGUICOLORS
+
+
+
 # endif
 }
 
